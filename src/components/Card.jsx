@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
-import { Skull, User, HeartPulse, Search, HelpCircle } from 'lucide-react';
+import { Skull, User, HeartPulse, Search, HelpCircle, CheckCircle } from 'lucide-react';
 
 const ROLES = {
   mafia: { name: 'Mafia', icon: Skull, color: 'text-red-500', glow: 'shadow-[0_0_30px_rgba(239,68,68,0.6)]', bg: 'bg-red-500/20' },
@@ -9,7 +9,7 @@ const ROLES = {
   detective: { name: 'Detective', icon: Search, color: 'text-amber-400', glow: 'shadow-[0_0_30px_rgba(251,191,36,0.6)]', bg: 'bg-amber-400/20' }
 };
 
-function Card({ role, isFlipped, isDealing, cardNumber, onClick }) {
+function Card({ role, isFlipped, isTaken, cardNumber, onClick }) {
   const roleData = role ? ROLES[role] : null;
   const Icon = roleData ? roleData.icon : HelpCircle;
 
@@ -73,7 +73,7 @@ function Card({ role, isFlipped, isDealing, cardNumber, onClick }) {
     >
       {/* Card Container for Flip */}
       <motion.div
-        className="w-full h-full relative preserve-3d transition-all duration-700"
+        className={`w-full h-full relative preserve-3d transition-all duration-700 ${isTaken ? 'invisible' : ''}`}
         animate={{ rotateY: isFlipped ? 180 : 0 }}
         transition={{ type: "spring", stiffness: 260, damping: 20 }}
         style={{ transformStyle: "preserve-3d" }}
@@ -115,6 +115,18 @@ function Card({ role, isFlipped, isDealing, cardNumber, onClick }) {
           <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white via-transparent to-transparent" />
         </div>
       </motion.div>
+
+      {/* Green Tick Overlay when taken */}
+      {isTaken && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ type: "spring", stiffness: 300, damping: 20 }}
+          className="absolute inset-0 rounded-2xl bg-black/70 flex items-center justify-center z-20"
+        >
+          <CheckCircle className="w-16 h-16 text-green-500 drop-shadow-[0_0_20px_rgba(34,197,94,0.6)]" />
+        </motion.div>
+      )}
     </motion.div>
   );
 }

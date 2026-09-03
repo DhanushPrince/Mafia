@@ -2,6 +2,7 @@ import { useState } from 'react';
 import PlayerCountScreen from './components/PlayerCountScreen';
 import DealingScreen from './components/DealingScreen';
 import Background from './components/Background';
+import RulesScreen from './components/RulesScreen';
 
 
 function App() {
@@ -62,8 +63,14 @@ function App() {
     <div className="app relative min-h-screen text-white overflow-hidden">
       <Background />
       <div className="relative z-10">
+        {screen === 'rules' && (
+          <RulesScreen onClose={() => setScreen('playerCount')} />
+        )}
         {screen === 'playerCount' && (
-          <PlayerCountScreen onStart={startGame} />
+          <PlayerCountScreen 
+            onStart={startGame} 
+            onRules={() => setScreen('rules')}
+          />
         )}
         {screen === 'dealing' && (
           <DealingScreen

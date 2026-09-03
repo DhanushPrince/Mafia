@@ -1,8 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BookOpen, Users, ChevronUp, ChevronDown } from 'lucide-react';
-import Rules from './Rules';
-import WarpTransition from './WarpTransition';
 
 // Synthesized tech tick sound
 const playTickSound = () => {
@@ -141,30 +139,21 @@ const PlayerCounter = ({ count, onChange }) => {
   );
 };
 
-function PlayerCountScreen({ onStart }) {
+function PlayerCountScreen({ onStart, onRules }) {
   const [playerCount, setPlayerCount] = useState(6);
-  const [showRules, setShowRules] = useState(false);
-  const [isLaunching, setIsLaunching] = useState(false);
 
   const handleStart = (e) => {
     e.preventDefault();
-    setIsLaunching(true);
-
-    setTimeout(() => {
-      onStart(playerCount);
-    }, 2000); // 2 seconds warp duration
+    onStart(playerCount);
   };
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 relative z-10">
-      {isLaunching && <WarpTransition />}
-
       <motion.button
         className="absolute top-8 right-8 flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-md hover:bg-white/10 transition-colors text-violet-200"
-        onClick={() => setShowRules(!showRules)}
+        onClick={onRules}
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
-        animate={isLaunching ? { opacity: 0, x: 100 } : { opacity: 1, x: 0 }}
       >
         <BookOpen size={18} />
         <span className="text-sm font-medium tracking-wide">Rules</span>
@@ -172,8 +161,8 @@ function PlayerCountScreen({ onStart }) {
 
       <motion.div
         initial={{ opacity: 0, scale: 0.9 }}
-        animate={isLaunching ? { scale: 0, opacity: 0, rotate: 180 } : { opacity: 1, scale: 1, rotate: 0 }}
-        transition={isLaunching ? { duration: 0.5, ease: "backIn" } : { duration: 0.5 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.5 }}
         className="w-full max-w-md"
       >
         <h1 className="text-5xl font-bold text-center mb-12 text-transparent bg-clip-text bg-gradient-to-b from-white to-white/50 drop-shadow-[0_0_25px_rgba(255,255,255,0.3)] tracking-tighter">
@@ -206,7 +195,6 @@ function PlayerCountScreen({ onStart }) {
         </div>
       </motion.div>
 
-      {showRules && <Rules onClose={() => setShowRules(false)} />}
     </div>
   );
 }

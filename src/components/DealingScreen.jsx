@@ -4,11 +4,15 @@ import Card from './Card';
 
 function DealingScreen({ deck, onRestart }) {
   const [flippedCards, setFlippedCards] = useState([]);
+  const [takenCards, setTakenCards] = useState([]);
 
   const handleCardClick = (index) => {
-    if (!flippedCards.includes(index)) {
-      setFlippedCards([...flippedCards, index]);
-    }
+    if (takenCards.includes(index)) return;
+    if (flippedCards.includes(index)) return;
+    setFlippedCards([...flippedCards, index]);
+    setTimeout(() => {
+      setTakenCards(prev => [...prev, index]);
+    }, 2000);
   };
 
   return (
@@ -62,7 +66,7 @@ function DealingScreen({ deck, onRestart }) {
             <Card
               role={role}
               isFlipped={flippedCards.includes(index)}
-              isDealing={false}
+              isTaken={takenCards.includes(index)}
               cardNumber={index + 1}
               onClick={() => handleCardClick(index)}
             />
