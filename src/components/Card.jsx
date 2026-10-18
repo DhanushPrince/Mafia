@@ -67,7 +67,7 @@ function Card({ role, isFlipped, isTaken, cardNumber, onClick }) {
       onMouseLeave={handleMouseLeave}
       style={{
         rotateX: isFlipped ? 0 : rotateX,
-        rotateY: isFlipped ? 180 : rotateY,
+        rotateY: isFlipped ? 0 : rotateY,
         transformStyle: "preserve-3d",
       }}
     >
