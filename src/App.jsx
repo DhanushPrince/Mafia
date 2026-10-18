@@ -26,7 +26,7 @@ function App() {
       roles.push('mafia');
     }
 
-    if (playerCount >= 5) {
+    if (playerCount >= 4) {
       roles.push('doctor');
       roles.push('detective');
     }

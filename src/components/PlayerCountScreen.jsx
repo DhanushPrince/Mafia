@@ -31,7 +31,7 @@ const PlayerCounter = ({ count, onChange }) => {
   const [direction, setDirection] = useState(0);
 
   const updateCount = (newCount) => {
-    if (newCount < 3 || newCount > 20) return;
+    if (newCount < 4 || newCount > 20) return;
     setDirection(newCount > count ? 1 : -1);
     onChange(newCount);
     playTickSound();
@@ -134,7 +134,7 @@ const PlayerCounter = ({ count, onChange }) => {
           </motion.button>
         </div>
       </div>
-      <div className="text-xs text-white/20 font-mono mt-1">MIN: 3 | SWIPE OR CLICK | MAX: 20</div>
+      <div className="text-xs text-white/20 font-mono mt-1">MIN: 4 | SWIPE OR CLICK | MAX: 20</div>
     </div>
   );
 };

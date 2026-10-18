@@ -37,7 +37,7 @@ npm run preview
 
 ## How to Play
 
-1. Enter the number of players (3-20)
+1. Enter the number of players (4-20)
 2. Click "Start Game"
 3. Click "Deal Next Card" to reveal each role
 4. Pass device around for private role viewing
@@ -45,8 +45,8 @@ npm run preview
 
 ## Role Assignment
 
-- 3-5 players → 1 Mafia
-- 6-9 players → 2 Mafia + Doctor + Detective
+- 4-6 players → 1 Mafia + Doctor + Detective
+- 7-9 players → 2 Mafia + Doctor + Detective
 - 10+ players → 3 Mafia + Doctor + Detective
 - Rest are Villagers
 
