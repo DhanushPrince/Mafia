@@ -24,7 +24,14 @@
 }
 
 @utility preserve-3d {
+  -webkit-transform-style: preserve-3d;
   transform-style: preserve-3d;
+}
+
+/* Safari/WebKit still needs the prefixed property, or the hidden face shows through mirrored */
+@utility backface-hidden {
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
 }
 
 :root {

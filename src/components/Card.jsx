@@ -1,7 +1,10 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import { HelpCircle, CheckCircle } from 'lucide-react';
 import { ROLES } from '../game/roles';
+
+// The build's CSS minifier drops -webkit-backface-visibility from the utility, so set it inline as well.
+const FACE_STYLE = { WebkitBackfaceVisibility: 'hidden', backfaceVisibility: 'hidden' };
 
 function Card({ role, isFlipped, isTaken, takenBy, playerName, cardNumber, onClick, disabled }) {
   const roleData = role ? ROLES[role] : null;
@@ -26,6 +29,20 @@ function Card({ role, isFlipped, isTaken, takenBy, playerName, cardNumber, onCli
     x.set(0);
     y.set(0);
   };
+
+  // Flip angle as a spring motion value, so each face can be hidden explicitly once it turns away.
+  // CSS backface-visibility alone is unreliable in WebKit (and ignored by some renderers), which
+  // showed the mirrored front face (#00N) through the card back.
+  const flip = useSpring(isFlipped ? 180 : 0, { stiffness: 260, damping: 20 });
+  useEffect(() => {
+    flip.set(isFlipped ? 180 : 0);
+  }, [isFlipped, flip]);
+  const facingFront = (v) => {
+    const a = ((v % 360) + 360) % 360;
+    return a > 90 && a < 270;
+  };
+  const frontVisibility = useTransform(flip, (v) => (facingFront(v) ? 'visible' : 'hidden'));
+  const backVisibility = useTransform(flip, (v) => (facingFront(v) ? 'hidden' : 'visible'));
 
   // Random float animation - rolled once per card, not on every render
   const { randomDuration, randomDelay } = useMemo(
@@ -81,14 +98,12 @@ function Card({ role, isFlipped, isTaken, takenBy, playerName, cardNumber, onCli
       {/* Card Container for Flip */}
       <motion.div
         className="w-full h-full relative preserve-3d"
-        animate={{ rotateY: isFlipped ? 180 : 0 }}
-        transition={{ type: 'spring', stiffness: 260, damping: 20 }}
-        style={{ transformStyle: 'preserve-3d' }}
+        style={{ rotateY: flip, transformStyle: 'preserve-3d', WebkitTransformStyle: 'preserve-3d' }}
       >
         {/* Front (Hidden initially, shows role) */}
-        <div
-          className={`absolute inset-0 backface-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl flex flex-col items-center justify-center p-3 sm:p-4 ${roleData?.glow || ''}`}
-          style={{ transform: 'rotateY(180deg)' }}
+        <motion.div
+          className={`absolute inset-0 backface-hidden rounded-2xl border border-white/10 bg-[#17141f]/90 flex flex-col items-center justify-center p-3 sm:p-4 ${roleData?.glow || ''}`}
+          style={{ ...FACE_STYLE, transform: 'rotateY(180deg) translateZ(1px)', visibility: frontVisibility }}
         >
           <div className={`absolute inset-0 ${roleData?.bg || ''} opacity-30 rounded-2xl`} />
           {playerName && (
@@ -111,21 +126,25 @@ function Card({ role, isFlipped, isTaken, takenBy, playerName, cardNumber, onCli
               #{String(cardNumber).padStart(3, '0')}
             </div>
           )}
-        </div>
+        </motion.div>
 
         {/* Back (Visible initially) */}
-        <div className="absolute inset-0 backface-hidden rounded-2xl border border-white/20 bg-white/10 backdrop-blur-md shadow-2xl flex items-center justify-center overflow-hidden group">
+        {/* No backdrop-filter on the 3D faces: in WebKit it breaks backface-visibility (mirrored #00N showing through) */}
+        <motion.div
+          className="absolute inset-0 backface-hidden rounded-2xl border border-white/20 bg-[#2a2633]/90 shadow-2xl flex items-center justify-center overflow-hidden group"
+          style={{ ...FACE_STYLE, transform: 'rotateY(0deg) translateZ(1px)', visibility: backVisibility }}
+        >
           {/* Glass Shard Effect */}
           <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent opacity-50 group-hover:opacity-70 transition-opacity" />
           <div className="absolute -inset-[100%] bg-gradient-to-r from-transparent via-white/10 to-transparent rotate-45 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
 
-          <div className="relative z-10 opacity-80 group-hover:opacity-100 group-hover:scale-110 transition-all duration-500">
+          <div className="relative z-10 opacity-80 group-hover:opacity-100 group-hover:scale-110 transition-[opacity,transform] duration-500">
             <HelpCircle className="w-10 h-10 sm:w-12 sm:h-12 text-white/50 drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]" />
           </div>
 
           {/* Card Pattern/Texture */}
           <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white via-transparent to-transparent" />
-        </div>
+        </motion.div>
       </motion.div>
 
       {/* Taken overlay: shows who took the card, never the role */}
@@ -134,6 +153,8 @@ function Card({ role, isFlipped, isTaken, takenBy, playerName, cardNumber, onCli
           initial={{ opacity: 0, scale: 0 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+          // the faces sit at translateZ(1px) inside the 3D context, where z-index doesn't apply; lift the overlay above them
+          style={{ z: 4 }}
           className="absolute inset-0 rounded-2xl bg-black/80 backdrop-blur-sm border border-green-500/30 flex flex-col items-center justify-center gap-3 p-3 z-20"
         >
           <CheckCircle className="w-12 h-12 sm:w-16 sm:h-16 text-green-500 drop-shadow-[0_0_20px_rgba(34,197,94,0.6)]" />
