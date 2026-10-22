@@ -45,3 +45,80 @@ export function namesForCount(count, savedNames = []) {
   }
   return result;
 }
+
+const SETTINGS_KEY = 'mafia-dealer:settings';
+
+export const DEFAULT_SETTINGS = Object.freeze({
+  mode: 'human', // 'human' = Human Game Master, 'narrator' = App is Game Master
+  voice: 'george', // 'george' | 'heart'
+  muted: false,
+  ambient: true,
+  noRepeatSave: true,
+});
+
+export function loadSettings() {
+  try {
+    const raw = window.localStorage.getItem(SETTINGS_KEY);
+    const data = raw ? JSON.parse(raw) : {};
+    return {
+      mode: data.mode === 'narrator' ? 'narrator' : 'human',
+      voice: data.voice === 'heart' ? 'heart' : 'george',
+      muted: data.muted === true,
+      ambient: data.ambient !== false,
+      noRepeatSave: data.noRepeatSave !== false,
+    };
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
+}
+
+export function saveSettings(settings) {
+  try {
+    window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  } catch {
+    // storage unavailable
+  }
+}
+
+// ---------- narrator game save (engine state, see engine.serialize/deserialize) ----------
+const GAME_KEY = 'mafia-dealer:narrator-game';
+
+export function loadSavedGameRaw() {
+  try {
+    return window.localStorage.getItem(GAME_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function saveGameRaw(raw) {
+  try {
+    window.localStorage.setItem(GAME_KEY, raw);
+  } catch {
+    // ignore
+  }
+}
+
+export function clearSavedGame() {
+  try {
+    window.localStorage.removeItem(GAME_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+const HINT_KEY = 'mafia-dealer:volume-hint-seen';
+export const volumeHintSeen = () => {
+  try {
+    return window.localStorage.getItem(HINT_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
+export const markVolumeHintSeen = () => {
+  try {
+    window.localStorage.setItem(HINT_KEY, '1');
+  } catch {
+    // ignore
+  }
+};

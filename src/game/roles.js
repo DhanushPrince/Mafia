@@ -51,3 +51,53 @@ export function getWinner(players, eliminated) {
   else if (mafiaAlive >= othersAlive) winner = 'mafia';
   return { mafiaAlive, othersAlive, winner };
 }
+
+/**
+ * Data-driven role definitions used by the narrator engine (src/game/engine.js).
+ *  - team:       'mafia' | 'village' (win check counts team 'mafia' vs everyone else)
+ *  - nightOrder: order of the role's night turn (null = no night turn)
+ *  - wakeClip / sleepClip: narrator clip ids (public/audio/<voice>/<id>.mp3)
+ *  - targetRule: key into TARGET_RULES in engine.js (who can be tapped)
+ *  - action:     key into ACTIONS in engine.js (what a tap does / how the night resolves)
+ * Adding a role (e.g. Sheriff, Jester) = add an entry here (+ a target rule / action
+ * resolver in engine.js if the existing ones don't fit). The state machine iterates this table.
+ */
+export const ROLE_DEFS = {
+  mafia: {
+    id: 'mafia',
+    team: 'mafia',
+    nightOrder: 1,
+    wakeClip: 'mafia_wake',
+    sleepClip: 'mafia_sleep',
+    targetRule: 'aliveNotOwnTeam',
+    action: 'kill',
+  },
+  doctor: {
+    id: 'doctor',
+    team: 'village',
+    nightOrder: 2,
+    wakeClip: 'doctor_wake',
+    sleepClip: 'doctor_sleep',
+    targetRule: 'aliveNoRepeatSave',
+    action: 'save',
+  },
+  detective: {
+    id: 'detective',
+    team: 'village',
+    nightOrder: 3,
+    wakeClip: 'detective_wake',
+    sleepClip: 'detective_sleep',
+    resultClip: 'detective_result',
+    targetRule: 'aliveExceptSelf',
+    action: 'investigate',
+  },
+  villager: {
+    id: 'villager',
+    team: 'village',
+    nightOrder: null,
+    wakeClip: null,
+    sleepClip: null,
+    targetRule: null,
+    action: null,
+  },
+};

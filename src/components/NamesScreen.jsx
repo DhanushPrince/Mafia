@@ -17,7 +17,7 @@ function validate(names) {
   });
 }
 
-function NamesScreen({ initialNames, onBack, onConfirm }) {
+function NamesScreen({ initialNames, onBack, onConfirm, mode = 'human' }) {
   const [names, setNames] = useState(initialNames);
   const errors = validate(names);
   const hasErrors = errors.some(Boolean);
@@ -56,7 +56,9 @@ function NamesScreen({ initialNames, onBack, onConfirm }) {
           Player Names
         </h2>
         <p className="text-center text-violet-300/60 text-sm mb-6">
-          Game Master: enter everyone who will receive a card. You don&apos;t get one.
+          {mode === 'narrator'
+            ? 'Enter everyone who is playing. Everyone gets a card; the app is the Game Master.'
+            : <>Game Master: enter everyone who will receive a card. You don&apos;t get one.</>}
         </p>
 
         <div className="relative group">

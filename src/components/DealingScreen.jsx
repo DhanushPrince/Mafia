@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { EyeOff, Crown, X } from 'lucide-react';
+import { EyeOff, Crown, X, Moon, Volume2 } from 'lucide-react';
 import Card from './Card';
-import { LiquidButton, HoldButton } from './ui';
+import { LiquidButton, HoldButton, PrimaryButton } from './ui';
 import { ROLES } from '../game/roles';
 
 const AUTO_HIDE_MS = 3000; // card flips back on its own after this long
 const FLIP_BACK_MS = 700; // let the flip-back animation finish before marking taken
 
-function DealingScreen({ deck, names, assignments, onAssign, onOpenGameMaster, onRestart }) {
+function DealingScreen({ deck, names, assignments, onAssign, onOpenGameMaster, onRestart, mode = 'human', onStartNight, showVolumeHint = false }) {
   const [pickerCard, setPickerCard] = useState(null); // card index awaiting "Who are you?"
   const [revealing, setRevealing] = useState(null); // { index, name } while face-up
   const [hiding, setHiding] = useState(null); // { index, name } while flipping back
@@ -80,7 +80,30 @@ function DealingScreen({ deck, names, assignments, onAssign, onOpenGameMaster, o
         </p>
       </motion.div>
 
-      {allDealt && (
+      {allDealt && mode === 'narrator' && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="relative mb-10 w-full max-w-sm"
+        >
+          <div className="absolute -inset-0.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 rounded-2xl blur opacity-30" />
+          <div className="relative bg-black/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 flex flex-col items-center gap-4 text-center">
+            <p className="text-violet-200/80 text-sm">
+              Everyone has a card. Put the phone in the middle of the table.
+            </p>
+            {showVolumeHint && (
+              <p data-testid="volume-hint" className="flex items-center gap-2 rounded-lg border border-amber-300/30 bg-amber-300/10 px-3 py-2 text-amber-100 text-sm">
+                <Volume2 size={16} className="shrink-0" /> Turn your phone volume up and silent mode off
+              </p>
+            )}
+            <PrimaryButton type="button" onClick={onStartNight} aria-label="Start night">
+              <Moon size={18} /> Start night
+            </PrimaryButton>
+          </div>
+        </motion.div>
+      )}
+
+      {allDealt && mode !== 'narrator' && (
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
