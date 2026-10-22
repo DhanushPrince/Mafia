@@ -1,17 +1,10 @@
-import React, { useRef } from 'react';
+import { useMemo } from 'react';
 import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
-import { Skull, User, HeartPulse, Search, HelpCircle, CheckCircle } from 'lucide-react';
+import { HelpCircle, CheckCircle } from 'lucide-react';
+import { ROLES } from '../game/roles';
 
-const ROLES = {
-  mafia: { name: 'Mafia', icon: Skull, color: 'text-red-500', glow: 'shadow-[0_0_30px_rgba(239,68,68,0.6)]', bg: 'bg-red-500/20' },
-  villager: { name: 'Villager', icon: User, color: 'text-cyan-400', glow: 'shadow-[0_0_30px_rgba(34,211,238,0.6)]', bg: 'bg-cyan-400/20' },
-  doctor: { name: 'Doctor', icon: HeartPulse, color: 'text-teal-400', glow: 'shadow-[0_0_30px_rgba(45,212,191,0.6)]', bg: 'bg-teal-400/20' },
-  detective: { name: 'Detective', icon: Search, color: 'text-amber-400', glow: 'shadow-[0_0_30px_rgba(251,191,36,0.6)]', bg: 'bg-amber-400/20' }
-};
-
-function Card({ role, isFlipped, isTaken, cardNumber, onClick }) {
+function Card({ role, isFlipped, isTaken, takenBy, playerName, cardNumber, onClick, disabled }) {
   const roleData = role ? ROLES[role] : null;
-  const Icon = roleData ? roleData.icon : HelpCircle;
 
   // 3D Tilt Logic
   const x = useMotionValue(0);
@@ -20,19 +13,13 @@ function Card({ role, isFlipped, isTaken, cardNumber, onClick }) {
   const mouseX = useSpring(x, { stiffness: 500, damping: 30 });
   const mouseY = useSpring(y, { stiffness: 500, damping: 30 });
 
-  const rotateX = useTransform(mouseY, [-0.5, 0.5], ["15deg", "-15deg"]);
-  const rotateY = useTransform(mouseX, [-0.5, 0.5], ["-15deg", "15deg"]);
+  const rotateX = useTransform(mouseY, [-0.5, 0.5], ['15deg', '-15deg']);
+  const rotateY = useTransform(mouseX, [-0.5, 0.5], ['-15deg', '15deg']);
 
   const handleMouseMove = (e) => {
     const rect = e.currentTarget.getBoundingClientRect();
-    const width = rect.width;
-    const height = rect.height;
-    const mouseXVal = e.clientX - rect.left;
-    const mouseYVal = e.clientY - rect.top;
-    const xPct = mouseXVal / width - 0.5;
-    const yPct = mouseYVal / height - 0.5;
-    x.set(xPct);
-    y.set(yPct);
+    x.set((e.clientX - rect.left) / rect.width - 0.5);
+    y.set((e.clientY - rect.top) / rect.height - 0.5);
   };
 
   const handleMouseLeave = () => {
@@ -40,14 +27,34 @@ function Card({ role, isFlipped, isTaken, cardNumber, onClick }) {
     y.set(0);
   };
 
-  // Random float animation
-  const randomDuration = Math.random() * 2 + 4;
-  const randomDelay = Math.random() * 2;
+  // Random float animation - rolled once per card, not on every render
+  const { randomDuration, randomDelay } = useMemo(
+    () => ({ randomDuration: Math.random() * 2 + 4, randomDelay: Math.random() * 2 }),
+    []
+  );
+
+  const label = isTaken
+    ? `Card ${cardNumber} taken by ${takenBy}`
+    : isFlipped
+      ? `Card ${cardNumber} revealed`
+      : `Card ${cardNumber}, tap to reveal`;
 
   return (
     <motion.div
-      className="relative w-48 h-72 perspective-1000 cursor-pointer"
-      onClick={onClick}
+      role="button"
+      tabIndex={isTaken || disabled ? -1 : 0}
+      aria-label={label}
+      aria-disabled={isTaken || disabled}
+      data-card={cardNumber}
+      data-state={isTaken ? 'taken' : isFlipped ? 'revealed' : 'hidden'}
+      className={`relative w-36 h-52 sm:w-48 sm:h-72 perspective-1000 ${isTaken || disabled ? 'cursor-default' : 'cursor-pointer'}`}
+      onClick={isTaken || disabled ? undefined : onClick}
+      onKeyDown={(e) => {
+        if (!isTaken && !disabled && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          onClick?.();
+        }
+      }}
       initial={{ opacity: 0, scale: 0.8 }}
       animate={{
         opacity: 1,
@@ -58,44 +65,49 @@ function Card({ role, isFlipped, isTaken, cardNumber, onClick }) {
         y: {
           duration: randomDuration,
           repeat: Infinity,
-          ease: "easeInOut",
-          delay: randomDelay
+          ease: 'easeInOut',
+          delay: randomDelay,
         },
-        default: { duration: 0.5 }
+        default: { duration: 0.5 },
       }}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       style={{
         rotateX: isFlipped ? 0 : rotateX,
         rotateY: isFlipped ? 0 : rotateY,
-        transformStyle: "preserve-3d",
+        transformStyle: 'preserve-3d',
       }}
     >
       {/* Card Container for Flip */}
       <motion.div
-        className={`w-full h-full relative preserve-3d transition-all duration-700 ${isTaken ? 'invisible' : ''}`}
+        className="w-full h-full relative preserve-3d"
         animate={{ rotateY: isFlipped ? 180 : 0 }}
-        transition={{ type: "spring", stiffness: 260, damping: 20 }}
-        style={{ transformStyle: "preserve-3d" }}
+        transition={{ type: 'spring', stiffness: 260, damping: 20 }}
+        style={{ transformStyle: 'preserve-3d' }}
       >
         {/* Front (Hidden initially, shows role) */}
         <div
-          className={`absolute inset-0 backface-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl flex flex-col items-center justify-center p-4 ${roleData?.glow || ''}`}
-          style={{ transform: "rotateY(180deg)" }}
+          className={`absolute inset-0 backface-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl flex flex-col items-center justify-center p-3 sm:p-4 ${roleData?.glow || ''}`}
+          style={{ transform: 'rotateY(180deg)' }}
         >
           <div className={`absolute inset-0 ${roleData?.bg || ''} opacity-30 rounded-2xl`} />
-          <div className="z-10 flex flex-col items-center gap-4">
+          {playerName && (
+            <div className="absolute top-3 inset-x-2 text-center text-xs sm:text-sm font-semibold text-white/70 truncate">
+              {playerName}
+            </div>
+          )}
+          <div className="z-10 flex flex-col items-center gap-3 sm:gap-4">
             {roleData && (
               <>
-                <roleData.icon className={`w-16 h-16 ${roleData.color} drop-shadow-[0_0_15px_rgba(255,255,255,0.5)]`} />
-                <h2 className={`text-2xl font-bold tracking-widest uppercase ${roleData.color} drop-shadow-lg`}>
+                <roleData.icon className={`w-12 h-12 sm:w-16 sm:h-16 ${roleData.color} drop-shadow-[0_0_15px_rgba(255,255,255,0.5)]`} />
+                <h2 className={`text-xl sm:text-2xl font-bold tracking-widest uppercase ${roleData.color} drop-shadow-lg`}>
                   {roleData.name}
                 </h2>
               </>
             )}
           </div>
           {cardNumber && (
-            <div className="absolute bottom-4 text-white/20 text-sm font-mono tracking-widest">
+            <div className="absolute bottom-3 sm:bottom-4 text-white/20 text-xs sm:text-sm font-mono tracking-widest">
               #{String(cardNumber).padStart(3, '0')}
             </div>
           )}
@@ -108,7 +120,7 @@ function Card({ role, isFlipped, isTaken, cardNumber, onClick }) {
           <div className="absolute -inset-[100%] bg-gradient-to-r from-transparent via-white/10 to-transparent rotate-45 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
 
           <div className="relative z-10 opacity-80 group-hover:opacity-100 group-hover:scale-110 transition-all duration-500">
-            <HelpCircle className="w-12 h-12 text-white/50 drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]" />
+            <HelpCircle className="w-10 h-10 sm:w-12 sm:h-12 text-white/50 drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]" />
           </div>
 
           {/* Card Pattern/Texture */}
@@ -116,15 +128,20 @@ function Card({ role, isFlipped, isTaken, cardNumber, onClick }) {
         </div>
       </motion.div>
 
-      {/* Green Tick Overlay when taken */}
+      {/* Taken overlay: shows who took the card, never the role */}
       {isTaken && (
         <motion.div
           initial={{ opacity: 0, scale: 0 }}
           animate={{ opacity: 1, scale: 1 }}
-          transition={{ type: "spring", stiffness: 300, damping: 20 }}
-          className="absolute inset-0 rounded-2xl bg-black/70 flex items-center justify-center z-20"
+          transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+          className="absolute inset-0 rounded-2xl bg-black/80 backdrop-blur-sm border border-green-500/30 flex flex-col items-center justify-center gap-3 p-3 z-20"
         >
-          <CheckCircle className="w-16 h-16 text-green-500 drop-shadow-[0_0_20px_rgba(34,197,94,0.6)]" />
+          <CheckCircle className="w-12 h-12 sm:w-16 sm:h-16 text-green-500 drop-shadow-[0_0_20px_rgba(34,197,94,0.6)]" />
+          {takenBy && (
+            <span className="max-w-full truncate text-base sm:text-lg font-bold text-white tracking-wide">
+              {takenBy}
+            </span>
+          )}
         </motion.div>
       )}
     </motion.div>

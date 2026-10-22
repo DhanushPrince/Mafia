@@ -2,10 +2,25 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BookOpen, Users, ChevronUp, ChevronDown } from 'lucide-react';
 
+import { MIN_PLAYERS, MAX_PLAYERS } from '../game/roles';
+
+// One shared AudioContext for every tick (browsers cap the number of live contexts).
+let sharedAudioCtx = null;
+const getAudioContext = () => {
+  if (!sharedAudioCtx) {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return null;
+    sharedAudioCtx = new Ctx();
+  }
+  if (sharedAudioCtx.state === 'suspended') sharedAudioCtx.resume();
+  return sharedAudioCtx;
+};
+
 // Synthesized tech tick sound
 const playTickSound = () => {
   try {
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const audioCtx = getAudioContext();
+    if (!audioCtx) return;
     const oscillator = audioCtx.createOscillator();
     const gainNode = audioCtx.createGain();
 
@@ -22,7 +37,7 @@ const playTickSound = () => {
 
     oscillator.start();
     oscillator.stop(audioCtx.currentTime + 0.03);
-  } catch (e) {
+  } catch {
     // Ignore audio errors
   }
 };
@@ -31,7 +46,7 @@ const PlayerCounter = ({ count, onChange }) => {
   const [direction, setDirection] = useState(0);
 
   const updateCount = (newCount) => {
-    if (newCount < 4 || newCount > 20) return;
+    if (newCount < MIN_PLAYERS || newCount > MAX_PLAYERS) return;
     setDirection(newCount > count ? 1 : -1);
     onChange(newCount);
     playTickSound();
@@ -119,6 +134,7 @@ const PlayerCounter = ({ count, onChange }) => {
           <motion.button
             whileHover={{ scale: 1.1, backgroundColor: "rgba(255,255,255,0.1)" }}
             whileTap={{ scale: 0.9 }}
+            aria-label="Increase player count"
             onClick={(e) => { e.preventDefault(); updateCount(count + 1); }}
             className="p-2 rounded-lg bg-white/5 border border-white/10 text-violet-200 hover:text-white transition-colors"
           >
@@ -127,6 +143,7 @@ const PlayerCounter = ({ count, onChange }) => {
           <motion.button
             whileHover={{ scale: 1.1, backgroundColor: "rgba(255,255,255,0.1)" }}
             whileTap={{ scale: 0.9 }}
+            aria-label="Decrease player count"
             onClick={(e) => { e.preventDefault(); updateCount(count - 1); }}
             className="p-2 rounded-lg bg-white/5 border border-white/10 text-violet-200 hover:text-white transition-colors"
           >
@@ -134,13 +151,14 @@ const PlayerCounter = ({ count, onChange }) => {
           </motion.button>
         </div>
       </div>
-      <div className="text-xs text-white/20 font-mono mt-1">MIN: 4 | SWIPE OR CLICK | MAX: 20</div>
+      <output data-testid="player-count" aria-live="polite" className="sr-only">{count}</output>
+      <div className="text-xs text-white/20 font-mono mt-1">MIN: {MIN_PLAYERS} | SWIPE OR TAP | MAX: {MAX_PLAYERS}</div>
     </div>
   );
 };
 
-function PlayerCountScreen({ onStart, onRules }) {
-  const [playerCount, setPlayerCount] = useState(6);
+function PlayerCountScreen({ initialCount = 6, onStart, onRules }) {
+  const [playerCount, setPlayerCount] = useState(initialCount);
 
   const handleStart = (e) => {
     e.preventDefault();
@@ -150,7 +168,7 @@ function PlayerCountScreen({ onStart, onRules }) {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 relative z-10">
       <motion.button
-        className="absolute top-8 right-8 flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-md hover:bg-white/10 transition-colors text-violet-200"
+        className="absolute top-4 right-4 sm:top-8 sm:right-8 flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-md hover:bg-white/10 transition-colors text-violet-200"
         onClick={onRules}
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
@@ -187,7 +205,7 @@ function PlayerCountScreen({ onStart, onRules }) {
               >
                 <div className="absolute inset-0 bg-white/20 translate-y-full hover:translate-y-0 transition-transform duration-300" />
                 <span className="relative z-10 flex items-center justify-center gap-2">
-                  Initialize Game
+                  Next: Player Names
                 </span>
               </motion.button>
             </form>

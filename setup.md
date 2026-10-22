@@ -1,82 +1,53 @@
-# Setup Guide: Host React App on GitHub
+# Setup Guide: Develop & Deploy
 
-Follow these steps to push your code to GitHub and host it.
+The app is a static Vite build hosted on **Cloudflare Pages** at https://mafia-dealer.pages.dev.
+Cloudflare Pages is connected to the GitHub repo `DhanushPrince/Mafia`, so **every push to `main` automatically builds and deploys**.
 
-## 1. Initialize and Push Code
-
-Run these commands in your terminal (inside the project folder):
+## 1. Run locally
 
 ```bash
-# 1. Initialize git (if not already done)
-git init
-
-# 2. Add all files to staging
-git add .
-
-# 3. Commit your changes
-git commit -m "Initial commit"
-
-# 4. Rename branch to main
-git branch -M main
-
-# 5. Add the remote repository
-# If you get "error: remote origin already exists", use 'set-url' instead of 'add'
-git remote add origin https://github.com/DhanushPrince/Mafia.git
-# OR
-git remote set-url origin https://github.com/DhanushPrince/Mafia.git
-
-# 6. Push to GitHub
-git push -u origin main
+git clone https://github.com/DhanushPrince/Mafia.git
+cd Mafia
+npm install
+npm run dev        # http://localhost:5173
 ```
 
-## 2. Troubleshooting: Permission Denied (403)
+## 2. Make a change
 
-If you see an error like:  
-`remote: Permission to DhanushPrince/Mafia.git denied to dhanush-aivar.`
+```bash
+git checkout -b my-change
+# ...edit...
+npm run build      # make sure the production build passes
+npm run preview    # optional: check the built site at http://localhost:4173
+git commit -am "Describe the change"
+git push -u origin my-change
+```
 
-This means your computer is remembering the wrong GitHub account (`dhanush-aivar`). You need to switch to `DhanushPrince`.
+Open a pull request. By default Cloudflare Pages also builds a preview deployment for the branch.
+Merging into `main` deploys to production automatically.
 
-**Fix:**
-1.  **Clear saved credentials:**
-    ```bash
-    git credential-osxkeychain erase
-    host=github.com
-    protocol=https
-    # Press Enter, then Ctrl+D (or just Enter twice depending on prompt)
-    ```
-    *Note: If the command hangs, just press `Ctrl + C` and try the next step.*
+## 3. Cloudflare Pages settings (for reference)
 
-2.  **Force authentication on next push:**
-    When you run `git push`, it should ask for a username and password.
-    *   **Username:** `DhanushPrince`
-    *   **Password:** Your **Personal Access Token** (Not your login password).
-        *   Go to GitHub -> Settings -> Developer Settings -> Personal access tokens -> Tokens (classic) -> Generate new token.
-        *   Select `repo` scope.
-        *   Copy the token and paste it when asked for the password.
+| Setting | Value |
+|---------|-------|
+| Production branch | `main` |
+| Framework preset | Vite (or None) |
+| Build command | `npm run build` |
+| Build output directory | `dist` |
+| Root directory | `/` |
 
-## 3. Host Live App on GitHub Pages (Optional)
+`vite.config.js` uses `base: '/'` because the site is served from the domain root.
+Static files in `public/` (e.g. `noise.svg`, `favicon.svg`) are copied to `dist/` as-is.
 
-If you want to host the *running* website (not just the code), follow these extra steps:
+## 4. Troubleshooting: Permission Denied (403) on push
 
-1.  **Install gh-pages:**
-    ```bash
-    npm install gh-pages --save-dev
-    ```
+If you see `remote: Permission to DhanushPrince/Mafia.git denied to <other-account>`, git is using the wrong saved GitHub credentials.
 
-2.  **Update `package.json`:**
-    Add these lines to your `package.json`:
-    ```json
-    "homepage": "https://DhanushPrince.github.io/Mafia",
-    "scripts": {
-      // ... other scripts
-      "predeploy": "npm run build",
-      "deploy": "gh-pages -d dist"
-    }
-    ```
-
-3.  **Deploy:**
-    ```bash
-    npm run deploy
-    ```
-
-Your app will be live at: `https://DhanushPrince.github.io/Mafia`
+1. Clear saved credentials (macOS):
+   ```bash
+   git credential-osxkeychain erase
+   host=github.com
+   protocol=https
+   ```
+   (press Enter twice)
+2. Push again and sign in as `DhanushPrince`, using a **Personal Access Token** (GitHub → Settings → Developer settings → Personal access tokens, `repo` scope) as the password.

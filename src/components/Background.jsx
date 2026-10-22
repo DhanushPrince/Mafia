@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 
 const Background = () => {
@@ -10,7 +10,7 @@ const Background = () => {
             <div className="absolute top-[40%] left-[30%] w-[40%] h-[40%] rounded-full bg-fuchsia-900/20 blur-[100px] animate-float" />
 
             {/* Aurora Lights */}
-            <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 brightness-100 contrast-150 mix-blend-overlay"></div>
+            <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-20 brightness-100 contrast-150 mix-blend-overlay"></div>
 
             {/* Floating Particles */}
             <Particles />
@@ -19,15 +19,19 @@ const Background = () => {
 };
 
 const Particles = () => {
-    // Generate random particles
-    const particles = Array.from({ length: 50 }).map((_, i) => ({
-        id: i,
-        x: Math.random() * 100,
-        y: Math.random() * 100,
-        size: Math.random() * 3 + 1,
-        duration: Math.random() * 20 + 10,
-        delay: Math.random() * 5,
-    }));
+    // Generate random particles once (not on every render)
+    const particles = useMemo(
+        () =>
+            Array.from({ length: 50 }).map((_, i) => ({
+                id: i,
+                x: Math.random() * 100,
+                y: Math.random() * 100,
+                size: Math.random() * 3 + 1,
+                duration: Math.random() * 20 + 10,
+                delay: Math.random() * 5,
+            })),
+        []
+    );
 
     return (
         <div className="absolute inset-0 pointer-events-none">

@@ -20,7 +20,7 @@ const STEPPER = [
 ];
 
 const TUTORIAL_STEPS = [
-  { num: 1, title: 'PLAYERS', desc: 'Choose number of players', emoji: '👥', sub: ['5', '6', '7', '8+'] },
+  { num: 1, title: 'PLAYERS', desc: 'Choose number of players', emoji: '👥', sub: ['4', '7', '10', '20'] },
   { num: 2, title: 'ROLES ASSIGNED', desc: 'Roles are hidden and assigned randomly', emoji: '🎭' },
   { num: 3, title: 'NIGHT FALLS', desc: 'The village sleeps... Mafia wakes up', emoji: '🌙' },
   { num: 4, title: 'ACTIONS', desc: 'Each role performs their special action', emoji: '⚡' },
@@ -28,22 +28,22 @@ const TUTORIAL_STEPS = [
 ];
 
 const GAME_FLOW = [
-  { title: 'Players Join', desc: 'Choose number of players (5 - 20).', color: 'text-blue-400', emoji: '👥' },
+  { title: 'Players Join', desc: 'Choose number of players (4 - 20).', color: 'text-blue-400', emoji: '👥' },
   { title: 'Roles Assigned', desc: 'Roles are hidden and assigned randomly.', color: 'text-green-400', emoji: '🎭' },
   { title: 'Night Phase', desc: 'Mafia wakes up and eliminates. Others perform their actions.', color: 'text-indigo-400', emoji: '🌙' },
   { title: 'Day Phase', desc: 'Discuss, share info and vote to eliminate a player.', color: 'text-amber-400', emoji: '☀️' },
   { title: 'Voting', desc: 'Most votes out a player. Rinse and repeat.', color: 'text-red-400', emoji: '🗳️' },
-  { title: 'Win', desc: 'Mafia eliminates all villagers or villagers outnumber Mafia.', color: 'text-yellow-400', emoji: '🏆' },
+  { title: 'Win', desc: 'Villagers win by eliminating all Mafia. Mafia win when they equal or outnumber the rest.', color: 'text-yellow-400', emoji: '🏆' },
 ];
 
 const SECTIONS_CONTENT = {
   overview: {
     title: 'GAME OVERVIEW',
-    body: 'Each player gets a role. Work with your team, complete your goal, and outsmart the others.',
+    body: 'For 4 to 20 players plus a Game Master who runs the game and gets no card. Each player gets a secret role: 4-6 players have 1 Mafia, 7-9 have 2, 10+ have 3, plus one Doctor and one Detective; everyone else is a Villager.',
   },
   mafia: {
     title: 'MAFIA',
-    body: 'The Mafia works in the shadows. Each night, they secretly choose a villager to eliminate. During the day, they must blend in and avoid suspicion. If the Mafia outnumbers the villagers, they win.',
+    body: 'The Mafia works in the shadows. Each night, they secretly choose a villager to eliminate. During the day, they must blend in and avoid suspicion. If the Mafia ever equal or outnumber everyone else, they win.',
     abilities: ['Eliminate one villager each night', 'Know who other Mafia members are', 'Must pretend to be innocent during the day'],
   },
   detective: {
@@ -66,7 +66,7 @@ const SECTIONS_CONTENT = {
     body: 'The game ends when one team achieves their goal.',
     conditions: [
       { team: 'Villagers Win', desc: 'Eliminate all Mafia members.', emoji: '🎉', color: 'text-cyan-400', bg: 'bg-cyan-500/10 border-cyan-500/30' },
-      { team: 'Mafia Wins', desc: 'Outnumber the Villagers.', emoji: '😈', color: 'text-red-400', bg: 'bg-red-500/10 border-red-500/30' },
+      { team: 'Mafia Win', desc: 'Equal or outnumber everyone else still alive.', emoji: '😈', color: 'text-red-400', bg: 'bg-red-500/10 border-red-500/30' },
     ],
   },
 };
@@ -94,7 +94,7 @@ function Rules({ onClose }) {
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top Stepper */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-gray-900/80 backdrop-blur-xl">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-white/10 bg-gray-900/80 backdrop-blur-xl">
           <div className="flex items-center gap-2 lg:gap-4 flex-1 justify-center">
             {STEPPER.map((step, i) => (
               <div key={step.label} className="flex items-center gap-2 lg:gap-4">
@@ -111,7 +111,7 @@ function Rules({ onClose }) {
               </div>
             ))}
           </div>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-white/10 text-white/70 hover:text-white transition-colors ml-4">
+          <button onClick={onClose} aria-label="Close rules" className="p-2 rounded-full hover:bg-white/10 text-white/70 hover:text-white transition-colors ml-4">
             <X size={24} />
           </button>
         </div>
@@ -160,7 +160,7 @@ function Rules({ onClose }) {
           </div>
 
           {/* Center Content */}
-          <div className="flex-1 overflow-y-auto p-6 lg:p-8">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
             {/* Mobile nav */}
             <div className="lg:hidden flex gap-2 overflow-x-auto pb-4 mb-4">
               {NAV_ITEMS.map((item) => (
@@ -252,8 +252,8 @@ function Rules({ onClose }) {
         </div>
 
         {/* Bottom CTA */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-white/10 bg-gray-900/80 backdrop-blur-xl">
-          <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between gap-4 px-4 sm:px-6 py-4 border-t border-white/10 bg-gray-900/80 backdrop-blur-xl">
+          <div className="hidden sm:flex items-center gap-3">
             <span className="text-2xl">🎮</span>
             <div>
               <div className="text-sm font-bold text-purple-300">Ready to play?</div>
@@ -262,7 +262,7 @@ function Rules({ onClose }) {
           </div>
           <button
             onClick={onClose}
-            className="px-8 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl font-bold text-white text-sm uppercase tracking-widest hover:from-purple-500 hover:to-indigo-500 transition-all shadow-lg shadow-purple-500/25 whitespace-nowrap"
+            className="w-full sm:w-auto px-8 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl font-bold text-white text-sm uppercase tracking-widest hover:from-purple-500 hover:to-indigo-500 transition-all shadow-lg shadow-purple-500/25 whitespace-nowrap"
           >
             GOT IT, LET'S PLAY!
           </button>

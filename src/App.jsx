@@ -1,80 +1,97 @@
 import { useState } from 'react';
 import PlayerCountScreen from './components/PlayerCountScreen';
+import NamesScreen from './components/NamesScreen';
 import DealingScreen from './components/DealingScreen';
+import GameMasterScreen from './components/GameMasterScreen';
 import Background from './components/Background';
 import RulesScreen from './components/RulesScreen';
-
+import { generateDeck } from './game/roles';
+import { loadLastGame, saveLastGame, namesForCount } from './game/storage';
 
 function App() {
+  const [lastGame] = useState(() => loadLastGame());
   const [screen, setScreen] = useState('playerCount');
+  const [playerCount, setPlayerCount] = useState(lastGame?.count ?? 6);
+  const [names, setNames] = useState(lastGame?.names ?? []);
   const [deck, setDeck] = useState([]);
-  const [currentCardIndex, setCurrentCardIndex] = useState(0);
+  // cardIndex -> player name, filled in as each player picks their name and views their card
+  const [assignments, setAssignments] = useState({});
+  const [eliminated, setEliminated] = useState([]);
 
-  const generateDeck = (playerCount) => {
-    const roles = [];
-
-    let mafiaCount;
-    if (playerCount <= 6) {
-      mafiaCount = 1;
-    } else if (playerCount <= 9) {
-      mafiaCount = 2;
-    } else {
-      mafiaCount = 3;
-    }
-
-    for (let i = 0; i < mafiaCount; i++) {
-      roles.push('mafia');
-    }
-
-    if (playerCount >= 4) {
-      roles.push('doctor');
-      roles.push('detective');
-    }
-
-    const villagersCount = playerCount - roles.length;
-    for (let i = 0; i < villagersCount; i++) {
-      roles.push('villager');
-    }
-
-    return shuffleDeck(roles);
+  const goToNames = (count) => {
+    // names are kept as-is so going 6 -> 4 -> 6 doesn't lose the last two
+    setPlayerCount(count);
+    setScreen('names');
   };
 
-  const shuffleDeck = (array) => {
-    const shuffled = [...array];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled;
-  };
-
-  const startGame = (playerCount) => {
-    const newDeck = generateDeck(playerCount);
-    setDeck(newDeck);
+  const startDealing = (finalNames) => {
+    setNames(finalNames);
+    saveLastGame(finalNames.length, finalNames);
+    setDeck(generateDeck(finalNames.length));
+    setAssignments({});
+    setEliminated([]);
     setScreen('dealing');
   };
 
-  const restartGame = () => {
-    setScreen('playerCount');
-    setDeck([]);
+  const assignCard = (cardIndex, name) => {
+    setAssignments((prev) => ({ ...prev, [cardIndex]: name }));
   };
+
+  const toggleEliminated = (name) => {
+    setEliminated((prev) => (prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]));
+  };
+
+  // Back to the count screen; count + names are kept in state (and localStorage).
+  const restartGame = () => {
+    setDeck([]);
+    setAssignments({});
+    setEliminated([]);
+    setScreen('playerCount');
+  };
+
+  // Players in the order the game master entered them, with their dealt role.
+  const players = names
+    .map((name) => {
+      const entry = Object.entries(assignments).find(([, n]) => n === name);
+      return entry ? { name, role: deck[Number(entry[0])] } : null;
+    })
+    .filter(Boolean);
 
   return (
     <div className="app relative min-h-screen text-white overflow-hidden">
       <Background />
       <div className="relative z-10">
-        {screen === 'rules' && (
-          <RulesScreen onClose={() => setScreen('playerCount')} />
-        )}
+        {screen === 'rules' && <RulesScreen onClose={() => setScreen('playerCount')} />}
         {screen === 'playerCount' && (
-          <PlayerCountScreen 
-            onStart={startGame} 
+          <PlayerCountScreen
+            initialCount={playerCount}
+            onStart={goToNames}
             onRules={() => setScreen('rules')}
+          />
+        )}
+        {screen === 'names' && (
+          <NamesScreen
+            initialNames={namesForCount(playerCount, names)}
+            onBack={() => setScreen('playerCount')}
+            onConfirm={startDealing}
           />
         )}
         {screen === 'dealing' && (
           <DealingScreen
             deck={deck}
+            names={names}
+            assignments={assignments}
+            onAssign={assignCard}
+            onOpenGameMaster={() => setScreen('gm')}
+            onRestart={restartGame}
+          />
+        )}
+        {screen === 'gm' && (
+          <GameMasterScreen
+            players={players}
+            eliminated={eliminated}
+            onToggle={toggleEliminated}
+            onBack={() => setScreen('dealing')}
             onRestart={restartGame}
           />
         )}
