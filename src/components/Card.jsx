@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import { HelpCircle, CheckCircle } from 'lucide-react';
 import { ROLES } from '../game/roles';
+import { nameFitClass } from '../game/nameFit';
 
 // The build's CSS minifier drops -webkit-backface-visibility from the utility, so set it inline as well.
 const FACE_STYLE = { WebkitBackfaceVisibility: 'hidden', backfaceVisibility: 'hidden' };
@@ -107,7 +108,7 @@ function Card({ role, isFlipped, isTaken, takenBy, playerName, cardNumber, onCli
         >
           <div className={`absolute inset-0 ${roleData?.bg || ''} opacity-30 rounded-2xl`} />
           {playerName && (
-            <div className="absolute top-3 inset-x-2 text-center text-xs sm:text-sm font-semibold text-white/70 truncate">
+            <div className="absolute top-3 inset-x-2 text-center text-xs sm:text-sm leading-tight font-semibold text-white/70 break-words [overflow-wrap:anywhere]">
               {playerName}
             </div>
           )}
@@ -159,7 +160,7 @@ function Card({ role, isFlipped, isTaken, takenBy, playerName, cardNumber, onCli
         >
           <CheckCircle className="w-12 h-12 sm:w-16 sm:h-16 text-green-500 drop-shadow-[0_0_20px_rgba(34,197,94,0.6)]" />
           {takenBy && (
-            <span className="max-w-full truncate text-base sm:text-lg font-bold text-white tracking-wide">
+            <span className={`max-w-full text-center ${nameFitClass(takenBy, { normal: 'text-base sm:text-lg', long: 'text-sm sm:text-base', veryLong: 'text-xs sm:text-base' })} font-bold text-white tracking-wide`}>
               {takenBy}
             </span>
           )}

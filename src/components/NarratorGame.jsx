@@ -14,6 +14,7 @@ import { startAmbient, stopAmbient } from '../audio/ambient';
 import { TIMING } from '../game/timing';
 import useWakeLock from '../hooks/useWakeLock';
 import { LiquidButton, PrimaryButton } from './ui';
+import { nameFitClass } from '../game/nameFit';
 
 const TURN_TITLES = {
   mafia: { wake: 'Mafia, open your eyes', hint: 'Tap who to eliminate' },
@@ -196,7 +197,7 @@ function PlayerTiles({ players, highlight }) {
           } ${highlight === p.name ? 'ring-2 ring-red-500/60' : ''}`}
         >
           {p.alive ? <HelpCircle className="w-7 h-7 text-white/40" /> : <Skull className="w-7 h-7 text-white/50" />}
-          <span className={`max-w-full truncate text-sm font-semibold ${p.alive ? 'text-white/80' : 'line-through text-white/50'}`}>{p.name}</span>
+          <span className={`max-w-full text-center ${nameFitClass(p.name, { normal: 'text-sm', long: 'text-xs', veryLong: 'text-[11px]' })} font-semibold ${p.alive ? 'text-white/80' : 'line-through text-white/50'}`}>{p.name}</span>
         </div>
       ))}
     </div>
@@ -351,7 +352,7 @@ function EndScreen({ state, onRestart }) {
               return (
                 <li key={p.name} className={`flex items-center gap-3 rounded-xl border px-3 py-2 ${r.border} ${p.alive ? '' : 'opacity-60'}`}>
                   <span className={`h-9 w-9 shrink-0 flex items-center justify-center rounded-full ${r.bg}`}><Icon className={`w-5 h-5 ${r.color}`} /></span>
-                  <span className={`flex-1 truncate font-semibold ${p.alive ? 'text-white' : 'line-through text-white/60'}`}>{p.name}</span>
+                  <span className={`flex-1 min-w-0 break-words [overflow-wrap:anywhere] font-semibold ${p.alive ? 'text-white' : 'line-through text-white/60'}`}>{p.name}</span>
                   <span className={`text-sm font-bold uppercase tracking-widest ${r.color}`}>{r.name}</span>
                 </li>
               );

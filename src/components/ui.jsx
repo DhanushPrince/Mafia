@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
+import { createHoldTimer } from './holdTimer';
 
 // The "liquid light" pill button used for Start New Game (original DealingScreen style).
 export function LiquidButton({ children, onClick, className = '', ...rest }) {
@@ -47,38 +48,16 @@ export function PrimaryButton({ children, className = '', disabled, ...rest }) {
  */
 export function HoldButton({ children, onComplete, holdMs = 1500, className = '', ...rest }) {
   const [progress, setProgress] = useState(0);
-  const frameRef = useRef(null);
-  const startRef = useRef(null);
-  const doneRef = useRef(false);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
+  const timerRef = useRef(null);
+  if (!timerRef.current) {
+    timerRef.current = createHoldTimer({ holdMs, onProgress: setProgress, onComplete: () => onCompleteRef.current?.() });
+  }
+  const start = () => timerRef.current.start();
+  const stop = () => timerRef.current.stop();
 
-  const stop = () => {
-    if (frameRef.current) cancelAnimationFrame(frameRef.current);
-    frameRef.current = null;
-    startRef.current = null;
-    if (!doneRef.current) setProgress(0);
-  };
-
-  const tick = (now) => {
-    if (startRef.current === null) startRef.current = now;
-    const p = Math.min(1, (now - startRef.current) / holdMs);
-    setProgress(p);
-    if (p >= 1) {
-      doneRef.current = true;
-      frameRef.current = null;
-      onComplete?.();
-      return;
-    }
-    frameRef.current = requestAnimationFrame(tick);
-  };
-
-  const start = () => {
-    if (frameRef.current) return;
-    doneRef.current = false;
-    startRef.current = null;
-    frameRef.current = requestAnimationFrame(tick);
-  };
-
-  useEffect(() => () => frameRef.current && cancelAnimationFrame(frameRef.current), []);
+  useEffect(() => () => timerRef.current?.stop(), []);
 
   return (
     <button

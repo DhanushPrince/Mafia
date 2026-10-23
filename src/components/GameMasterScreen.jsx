@@ -97,7 +97,7 @@ function GameMasterScreen({ players, eliminated, onToggle, onBack, onRestart }) 
                   <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${role.bg}`}>
                     <Icon className={`h-5 w-5 ${role.color}`} />
                   </span>
-                  <span className={`flex-1 truncate text-lg font-semibold ${out ? 'line-through text-white/50' : 'text-white'}`}>
+                  <span className={`flex-1 min-w-0 break-words [overflow-wrap:anywhere] text-left text-lg font-semibold ${out ? 'line-through text-white/50' : 'text-white'}`}>
                     {p.name}
                   </span>
                   <span className={`text-sm font-bold uppercase tracking-widest ${role.color} ${out ? 'line-through' : ''}`}>

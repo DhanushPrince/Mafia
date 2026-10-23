@@ -5,6 +5,7 @@ import Card from './Card';
 import { LiquidButton, HoldButton, PrimaryButton } from './ui';
 import { ROLES } from '../game/roles';
 import NameVoiceStatus from './NameVoiceStatus';
+import { nameFitClass } from '../game/nameFit';
 
 const AUTO_HIDE_MS = 3000; // card flips back on its own after this long
 const FLIP_BACK_MS = 700; // let the flip-back animation finish before marking taken
@@ -210,7 +211,7 @@ function DealingScreen({ deck, names, assignments, onAssign, onOpenGameMaster, o
                     type="button"
                     whileTap={{ scale: 0.95 }}
                     onClick={() => choosePlayer(name)}
-                    className="truncate rounded-lg bg-white/5 border border-white/10 px-3 py-3 text-lg font-semibold text-violet-100 hover:bg-violet-500/20 hover:border-violet-400/50 transition-colors"
+                    className={`min-w-0 ${nameFitClass(name, { normal: 'text-lg', long: 'text-base', veryLong: 'text-sm' })} rounded-lg bg-white/5 border border-white/10 px-3 py-3 font-semibold text-violet-100 hover:bg-violet-500/20 hover:border-violet-400/50 transition-colors`}
                   >
                     {name}
                   </motion.button>
