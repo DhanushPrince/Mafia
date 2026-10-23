@@ -63,7 +63,7 @@ export function createInitialState(rules = {}) {
     round: 0, // night/day counter, 1-based once the first night starts
     night: emptyNight(), // selections: { [roleId]: name }, result: detective answer
     lastSave: null, // who the Doctor saved last night (repeat-save rule)
-    morning: null, // { victim, attacked, saved }
+    morning: null, // { victim, attacked, saved, detectiveFoundMafia }
     vote: null, // { out, tie } once the village has voted this day
     resumeTo: null, // where CHECK_WIN goes when nobody has won
     winner: null, // 'villagers' | 'mafia'
@@ -148,6 +148,8 @@ export const ACTIONS = {
     resolve: (ctx, { state, target }) => {
       ctx.log.detectiveCheck =
         target && state.night.result !== null ? { target, isMafia: state.night.result } : null;
+      // announced at morning (no name): only a real (alive) Detective who checked an actual Mafia
+      ctx.detectiveFoundMafia = Boolean(target) && state.night.result === true;
     },
   },
 };
@@ -166,15 +168,38 @@ export const selectSelection = (state, roleId) => state.night.selections[roleId]
 /** Detective's answer this night: true (Mafia) / false (not Mafia) / null. */
 export const selectDetectiveResult = (state) => state.night.result;
 
+/**
+ * Narration items are clip ids (strings) or { name } for a synthesised player name.
+ * `opts.canSayName(name)` says whether the name can be spoken right now (Kokoro clip ready or
+ * speechSynthesis available); otherwise the old "Look at the screen" lines are used.
+ */
+const sayName = (opts, name) => Boolean(name && opts && typeof opts.canSayName === 'function' && opts.canSayName(name));
+
+/** Morning summary: Mafia/Doctor outcome, then (only if true) the Detective found a Mafia - never a name for that. */
+export function morningClips(morning, opts = {}) {
+  const victim = morning?.victim;
+  let outcome;
+  if (victim) outcome = sayName(opts, victim) ? ['killed_pre', { name: victim }, 'killed_post'] : ['killed'];
+  else outcome = ['saved'];
+  return ['morning', ...outcome, ...(morning?.detectiveFoundMafia ? ['detective_found'] : [])];
+}
+
+/** Vote outcome narration (array), or null before the vote. */
+export function voteClips(state, opts = {}) {
+  if (!state.vote) return null;
+  if (state.vote.tie || !state.vote.out) return ['tie'];
+  return sayName(opts, state.vote.out) ? ['voted_out_pre', { name: state.vote.out }, 'voted_out_post'] : ['voted_out'];
+}
+
 /** Clip ids the narrator says when the current phase is entered. */
-export function entryClips(state) {
+export function entryClips(state, opts = {}) {
   const def = defFor(currentTurnRole(state));
   if (def) return def.wakeClip ? [def.wakeClip] : [];
   switch (state.phase) {
     case PHASES.NIGHT_INTRO:
       return state.round === 1 ? ['pass_hint', 'night_start'] : ['night_start'];
     case PHASES.MORNING:
-      return ['morning', state.morning?.victim ? 'killed' : 'saved'];
+      return morningClips(state.morning, opts);
     case PHASES.DAY_DISCUSS:
       return ['discuss'];
     case PHASES.VOTE:
@@ -196,7 +221,7 @@ export const voteClip = (state) => (state.vote ? (state.vote.tie ? 'tie' : 'vote
 
 /** Every clip id the game can use (for preloading). */
 export function allClipIds() {
-  const ids = new Set(['pass_hint', 'night_start', 'morning', 'killed', 'saved', 'discuss', 'vote', 'voted_out', 'tie', 'villagers_win', 'mafia_win']);
+  const ids = new Set(['pass_hint', 'night_start', 'morning', 'killed', 'saved', 'discuss', 'vote', 'voted_out', 'tie', 'villagers_win', 'mafia_win', 'detective_found', 'killed_pre', 'killed_post', 'voted_out_pre', 'voted_out_post']);
   Object.values(ROLE_DEFS).forEach((d) => [d.wakeClip, d.sleepClip, d.resultClip].forEach((c) => c && ids.add(c)));
   return [...ids];
 }
@@ -227,7 +252,7 @@ function startNight(state) {
 
 /** Run every turn's action resolver, then apply deaths (attacked and not protected). */
 function resolveNight(state) {
-  const ctx = { attacks: [], protects: [], lastSave: null, log: {} };
+  const ctx = { attacks: [], protects: [], lastSave: null, detectiveFoundMafia: false, log: {} };
   state.nightOrder.forEach((roleId) => {
     const def = defFor(roleId);
     const action = def && ACTIONS[def.action];
@@ -242,7 +267,7 @@ function resolveNight(state) {
     ...state,
     phase: PHASES.MORNING,
     players: deaths.reduce(killPlayer, state.players),
-    morning: { victim, attacked, saved },
+    morning: { victim, attacked, saved, detectiveFoundMafia: ctx.detectiveFoundMafia },
     lastSave: ctx.lastSave,
     log: updateLog(state, state.round, { ...ctx.log, killed: victim, saved }),
   };

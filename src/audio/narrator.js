@@ -1,4 +1,5 @@
 import LINES from './lines.json';
+import { nameVoice, speakName } from './nameVoice';
 
 export { LINES };
 export const VOICES = {
@@ -7,6 +8,8 @@ export const VOICES = {
 };
 
 // 44-byte silent WAV, played on the user's first tap to unlock the shared element (iOS/Android autoplay).
+const NAME_GAP_MS = 150;
+
 const SILENT_WAV =
   'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
 
@@ -81,14 +84,24 @@ class Narrator {
     this.listeners.forEach((fn) => fn(text));
   }
 
-  /** Queue clips; resolves after the last one ends. */
+  /**
+   * Queue items; resolves after the last one ends. An item is a clip id or { name } (a player's
+   * name, synthesised in the browser - see nameVoice.js). Names get a short gap on either side and
+   * extend the current caption ("Last night, the Mafia struck. Arjun did not survive.").
+   */
   say(ids) {
-    const list = Array.isArray(ids) ? ids : [ids];
+    const list = (Array.isArray(ids) ? ids : [ids]).filter((x) => x !== null && x !== undefined);
     const gen = this.generation;
     const job = this.queue.then(async () => {
+      let prev = null;
       for (const id of list) {
         if (gen !== this.generation) return;
-        await this.playOne(id, gen);
+        const isName = typeof id === 'object';
+        if (prev !== null && (isName || typeof prev === 'object')) await new Promise((r) => setTimeout(r, NAME_GAP_MS / this.rate));
+        if (gen !== this.generation) return;
+        const append = prev !== null && (isName || typeof prev === 'object');
+        await (isName ? this.playName(id.name, gen) : this.playOne(id, gen, append));
+        prev = id;
       }
       // the last caption stays visible (also when a clip failed) until the next line / stop()
     });
@@ -96,22 +109,37 @@ class Narrator {
     return job;
   }
 
-  playOne(id, gen) {
+  /** A player's name: Kokoro clip if ready, else speechSynthesis, else just a short pause. */
+  playName(name, gen) {
+    this.setCaption(`${this.caption} ${name}`.trim());
+    const url = nameVoice.get(this.voice, name);
+    const speak = () => (gen === this.generation ? speakName(name, { rate: this.rate, muted: this.muted }) : undefined);
+    if (!url) return Promise.resolve(speak());
+    // a broken blob falls back to the browser's speech for just the name
+    return this.playOne(null, gen, true, url).then((ok) => (ok === false ? speak() : undefined));
+  }
+
+  playOne(id, gen, append = false, srcOverride = null) {
     const a = this.el();
-    this.setCaption(LINES[id] || '');
+    if (id !== null) this.setCaption(append ? `${this.caption} ${LINES[id] || ''}`.trim() : LINES[id] || '');
     if (!a) return Promise.resolve();
     return new Promise((resolve) => {
       let done = false;
+      let failed = false;
       let safety = null;
+      const onError = () => {
+        failed = true;
+        finish();
+      };
       const finish = () => {
         if (done) return;
         done = true;
         clearTimeout(safety);
         a.removeEventListener('ended', finish);
-        a.removeEventListener('error', finish);
+        a.removeEventListener('error', onError);
         a.removeEventListener('loadedmetadata', onMeta);
         this.cancelCurrent = null;
-        resolve();
+        resolve(!failed);
       };
       const onMeta = () => {
         // re-arm the safety net from the real duration
@@ -122,11 +150,11 @@ class Narrator {
       this.cancelCurrent = finish;
       if (gen !== this.generation) return finish();
       a.addEventListener('ended', finish);
-      a.addEventListener('error', finish);
+      a.addEventListener('error', onError);
       a.addEventListener('loadedmetadata', onMeta);
       safety = setTimeout(finish, 10000);
       a.muted = this.muted;
-      a.src = this.url(id);
+      a.src = srcOverride || this.url(id);
       a.playbackRate = this.rate;
       a.defaultPlaybackRate = this.rate;
       try {
@@ -139,7 +167,7 @@ class Narrator {
           });
         }
       } catch {
-        finish();
+        onError();
       }
     });
   }
@@ -170,6 +198,11 @@ class Narrator {
       }
     }
     this.cancelCurrent?.();
+    try {
+      if (typeof window !== 'undefined' && window.speechSynthesis) window.speechSynthesis.cancel();
+    } catch {
+      // ignore
+    }
     this.queue = Promise.resolve();
     this.setCaption('');
   }

@@ -6,9 +6,10 @@ import {
 import { ROLES } from '../game/roles';
 import {
   PHASES, isTurnPhase, currentTurnRole, selectTargets, selectCurrentSelection, selectDetectiveResult,
-  entryClips, exitClips, voteClip, alivePlayers,
+  entryClips, exitClips, voteClips, alivePlayers,
 } from '../game/engine';
 import { narrator } from '../audio/narrator';
+import { nameVoice, canSpeakName } from '../audio/nameVoice';
 import { startAmbient, stopAmbient } from '../audio/ambient';
 import { TIMING } from '../game/timing';
 import useWakeLock from '../hooks/useWakeLock';
@@ -19,6 +20,9 @@ const TURN_TITLES = {
   doctor: { wake: 'Doctor, open your eyes', hint: 'Tap who to save' },
   detective: { wake: 'Detective, open your eyes', hint: 'Tap who to investigate' },
 };
+
+// a name is spoken if its Kokoro clip is ready, else via speechSynthesis; otherwise the "Look at the screen" lines
+const nameOpts = { canSayName: (name) => Boolean(nameVoice.get(narrator.voice, name)) || canSpeakName() };
 
 const NIGHT_PHASES = new Set([PHASES.NIGHT_INTRO, PHASES.MAFIA_TURN, PHASES.DOCTOR_TURN, PHASES.DETECTIVE_TURN]);
 
@@ -148,15 +152,18 @@ function NightTurn({ state, dispatch, stage, endsAt, now, showResult }) {
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center gap-6"
           >
+            <div data-testid="detective-result-name" className="text-center">
+              <div className="text-3xl font-semibold text-white/90">{selected}</div>
+              <div className="text-xl text-neutral-300 mt-1">is</div>
+            </div>
             {showResult ? (
-              <ThumbsUp className="w-40 h-40 text-red-800" strokeWidth={1.5} />
+              <ThumbsUp className="w-36 h-36 text-red-500" strokeWidth={1.75} />
             ) : (
-              <ThumbsDown className="w-40 h-40 text-emerald-800" strokeWidth={1.5} />
+              <ThumbsDown className="w-36 h-36 text-emerald-400" strokeWidth={1.75} />
             )}
-            <div className={`text-5xl font-bold tracking-widest ${showResult ? 'text-red-800' : 'text-emerald-800'}`}>
+            <div className={`text-5xl font-bold tracking-widest text-center ${showResult ? 'text-red-500' : 'text-emerald-400'}`}>
               {showResult ? 'MAFIA' : 'NOT MAFIA'}
             </div>
-            <div className="text-neutral-600 text-lg">{selected}</div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -204,7 +211,7 @@ const Panel = ({ children, className = '' }) => (
 );
 
 function Morning({ state, dispatch }) {
-  const { victim, saved } = state.morning || {};
+  const { victim, saved, detectiveFoundMafia } = state.morning || {};
   return (
     <div className="min-h-screen flex flex-col items-center px-4 pt-20 pb-28">
       <div className="w-full max-w-md flex flex-col items-center gap-5">
@@ -225,6 +232,11 @@ function Morning({ state, dispatch }) {
               </>
             )}
           </div>
+          {detectiveFoundMafia && (
+            <div data-testid="morning-detective-found" className="mt-4 pt-4 border-t border-white/10 flex items-center justify-center gap-2 text-amber-200/90 text-base font-medium">
+              <Search size={18} className="text-amber-300/80" /> The Detective found a Mafia
+            </div>
+          )}
         </Panel>
         <PlayerTiles players={state.players} highlight={victim} />
         <PrimaryButton type="button" onClick={() => dispatch({ type: 'ADVANCE', from: state.phase })}>Continue to discussion</PrimaryButton>
@@ -442,10 +454,10 @@ function NarratorGame({ state, dispatch, settings, onSettings, onRestart }) {
         return;
       }
       if (phase === PHASES.VOTE && s.vote) {
-        narrator.say(voteClip(s)); // resumed after the vote was cast
+        narrator.say(voteClips(s, nameOpts)); // resumed after the vote was cast
         return;
       }
-      narrator.say(entryClips(s)); // MORNING, VOTE, END: user taps to continue
+      narrator.say(entryClips(s, nameOpts)); // MORNING, VOTE, END: user taps to continue
     })();
 
     return () => {
@@ -462,20 +474,20 @@ function NarratorGame({ state, dispatch, settings, onSettings, onRestart }) {
   useEffect(() => {
     if (voteKey && prevVoteKey.current !== voteKey) {
       narrator.stop();
-      narrator.say(voteClip(stateRef.current));
+      narrator.say(voteClips(stateRef.current, nameOpts));
     }
     prevVoteKey.current = voteKey;
   }, [voteKey]);
 
-  // Detective result: big thumbs for resultMs, plus the "here is your answer" clip
+  // Detective result: big thumbs until the turn window ends (always >= resultMs), plus the "here is your answer" clip
   const detectiveResult = state.phase === PHASES.DETECTIVE_TURN ? selectDetectiveResult(state) : null;
   const investigated = state.phase === PHASES.DETECTIVE_TURN ? state.night.selections.detective : null;
   useEffect(() => {
     if (!investigated || detectiveResult === null) return undefined;
     setShowResult(detectiveResult);
     narrator.say('detective_result');
-    const t = setTimeout(() => setShowResult(null), TIMING.resultMs);
-    return () => clearTimeout(t);
+    // stays up until the turn's 'sleep' stage (cleared there); taps lock >= resultMs before the end
+    return undefined;
   }, [investigated, detectiveResult]);
 
   // Ambient drone under night phases

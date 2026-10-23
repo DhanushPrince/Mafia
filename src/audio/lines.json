@@ -16,5 +16,10 @@
   "tie": "The vote is tied. No one is eliminated today.",
   "villagers_win": "All the Mafia have been found. The villagers win!",
   "mafia_win": "The Mafia now control the village. The Mafia win!",
-  "pass_hint": "Place the phone in the middle where everyone can reach it."
+  "pass_hint": "Place the phone in the middle where everyone can reach it.",
+  "detective_found": "The Detective found one of the Mafia last night.",
+  "killed_pre": "Last night, the Mafia struck.",
+  "killed_post": "did not survive.",
+  "voted_out_pre": "The village has spoken.",
+  "voted_out_post": "has been eliminated."
 }

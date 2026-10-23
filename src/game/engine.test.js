@@ -15,6 +15,8 @@ import {
   isResumable,
   ENGINE_VERSION,
   allClipIds,
+  morningClips,
+  voteClips,
 } from './engine';
 import { ROLE_DEFS } from './roles';
 
@@ -82,7 +84,7 @@ describe('phase flow', () => {
 
   it('no tap by timeout means no kill / no save / no result', () => {
     const s = night(start());
-    expect(s.morning).toEqual({ victim: null, attacked: false, saved: false });
+    expect(s.morning).toEqual({ victim: null, attacked: false, saved: false, detectiveFoundMafia: false });
     expect(s.players.every((p) => p.alive)).toBe(true);
     expect(s.night.result).toBeNull();
     expect(entryClips(s)).toEqual(['morning', 'saved']);
@@ -113,7 +115,7 @@ describe('kill vs save', () => {
 
   it('kill target == save -> nobody dies', () => {
     const s = night(start(), { kill: 'Bob', save: 'Bob' });
-    expect(s.morning).toEqual({ victim: null, attacked: true, saved: true });
+    expect(s.morning).toEqual({ victim: null, attacked: true, saved: true, detectiveFoundMafia: false });
     expect(s.players.every((p) => p.alive)).toBe(true);
     expect(entryClips(s)).toEqual(['morning', 'saved']);
     expect(s.log[0]).toMatchObject({ killed: null, saved: true });
@@ -232,6 +234,110 @@ describe('detective', () => {
   });
 });
 
+describe('morning: detective found a Mafia', () => {
+  it('correct guess + kill -> killed, then detective_found (no name)', () => {
+    const s = night(start(), { kill: 'Bob', save: 'Carol', check: 'Alice' });
+    expect(s.morning).toMatchObject({ victim: 'Bob', detectiveFoundMafia: true });
+    expect(entryClips(s)).toEqual(['morning', 'killed', 'detective_found']);
+  });
+
+  it('correct guess + save -> saved, then detective_found', () => {
+    const s = night(start(), { kill: 'Bob', save: 'Bob', check: 'Alice' });
+    expect(s.morning).toMatchObject({ victim: null, saved: true, detectiveFoundMafia: true });
+    expect(entryClips(s)).toEqual(['morning', 'saved', 'detective_found']);
+  });
+
+  it('wrong guess -> nothing about the detective', () => {
+    const k = night(start(), { kill: 'Bob', save: 'Carol', check: 'Carol' });
+    expect(k.morning.detectiveFoundMafia).toBe(false);
+    expect(entryClips(k)).toEqual(['morning', 'killed']);
+    const v = night(start(), { kill: 'Bob', save: 'Bob', check: 'Bob' });
+    expect(entryClips(v)).toEqual(['morning', 'saved']);
+  });
+
+  it('no check -> nothing about the detective', () => {
+    const s = night(start(), { kill: 'Bob' });
+    expect(s.morning.detectiveFoundMafia).toBe(false);
+    expect(entryClips(s)).toEqual(['morning', 'killed']);
+  });
+
+  it('detective killed tonight still reports a check made while alive', () => {
+    const s = night(start(), { kill: 'Dave', save: 'Carol', check: 'Alice' });
+    expect(s.morning).toMatchObject({ victim: 'Dave', detectiveFoundMafia: true });
+    expect(entryClips(s)).toEqual(['morning', 'killed', 'detective_found']);
+  });
+
+  it('dead detective (dummy turn) tapping a Mafia -> not announced', () => {
+    const six = [
+      { name: 'M', role: 'mafia' },
+      { name: 'Doc', role: 'doctor' },
+      { name: 'Det', role: 'detective' },
+      { name: 'V1', role: 'villager' },
+      { name: 'V2', role: 'villager' },
+      { name: 'V3', role: 'villager' },
+    ];
+    let s = night(start(six), { kill: 'Det' });
+    s = day(s, null);
+    // night 2: kill V1, doctor saves V1, dead detective taps the real Mafia
+    s = run(s, { type: 'ADVANCE' }, { type: 'SELECT', name: 'V1' }, { type: 'ADVANCE' }, { type: 'SELECT', name: 'V1' }, { type: 'ADVANCE' });
+    expect(s.phase).toBe(PHASES.DETECTIVE_TURN);
+    s = run(s, { type: 'SELECT', name: 'M' }, { type: 'ADVANCE' });
+    expect(s.phase).toBe(PHASES.MORNING);
+    expect(s.morning).toMatchObject({ saved: true, detectiveFoundMafia: false });
+    expect(entryClips(s)).toEqual(['morning', 'saved']);
+    // and with a kill
+    let k = night(start(six), { kill: 'Det' });
+    k = day(k, null);
+    k = run(k, { type: 'ADVANCE' }, { type: 'SELECT', name: 'V2' }, { type: 'ADVANCE' }, { type: 'ADVANCE' }, { type: 'SELECT', name: 'M' }, { type: 'ADVANCE' });
+    expect(k.morning).toMatchObject({ victim: 'V2', detectiveFoundMafia: false });
+    expect(entryClips(k)).toEqual(['morning', 'killed']);
+  });
+
+  it('flag resets on the next night', () => {
+    let s = night(start(), { kill: 'Bob', save: 'Carol', check: 'Alice' });
+    s = day(s, null); // tie -> next night
+    expect(s.phase).toBe(PHASES.NIGHT_INTRO);
+    expect(s.morning).toBeNull();
+  });
+});
+
+describe('narration sequence builder (names)', () => {
+  const yes = { canSayName: () => true };
+  const no = { canSayName: () => false };
+  it('killed with name: pre + {name} + post', () => {
+    expect(morningClips({ victim: 'Arjun', saved: false }, yes)).toEqual(['morning', 'killed_pre', { name: 'Arjun' }, 'killed_post']);
+  });
+  it('killed, name not speakable -> old "Look at the screen" line', () => {
+    expect(morningClips({ victim: 'Arjun' }, no)).toEqual(['morning', 'killed']);
+    expect(morningClips({ victim: 'Arjun' })).toEqual(['morning', 'killed']); // no opts
+  });
+  it('only names that can be said are said', () => {
+    const only = { canSayName: (n) => n === 'Priya' };
+    expect(morningClips({ victim: 'Arjun' }, only)).toEqual(['morning', 'killed']);
+    expect(morningClips({ victim: 'Priya' }, only)).toEqual(['morning', 'killed_pre', { name: 'Priya' }, 'killed_post']);
+  });
+  it('saved never says a name', () => {
+    expect(morningClips({ victim: null, saved: true }, yes)).toEqual(['morning', 'saved']);
+  });
+  it('detective_found follows the kill / save line, with or without names', () => {
+    expect(morningClips({ victim: 'Arjun', detectiveFoundMafia: true }, yes)).toEqual(['morning', 'killed_pre', { name: 'Arjun' }, 'killed_post', 'detective_found']);
+    expect(morningClips({ victim: 'Arjun', detectiveFoundMafia: true }, no)).toEqual(['morning', 'killed', 'detective_found']);
+    expect(morningClips({ victim: null, saved: true, detectiveFoundMafia: true }, yes)).toEqual(['morning', 'saved', 'detective_found']);
+  });
+  it('entryClips(MORNING) uses the builder with the given opts', () => {
+    const s = night(start(), { kill: 'Bob', save: 'Carol', check: 'Alice' });
+    expect(entryClips(s, yes)).toEqual(['morning', 'killed_pre', { name: 'Bob' }, 'killed_post', 'detective_found']);
+    expect(entryClips(s)).toEqual(['morning', 'killed', 'detective_found']);
+  });
+  it('voted out with name / fallback / tie / before the vote', () => {
+    const base = start();
+    expect(voteClips({ ...base, vote: { out: 'Alice', tie: false } }, yes)).toEqual(['voted_out_pre', { name: 'Alice' }, 'voted_out_post']);
+    expect(voteClips({ ...base, vote: { out: 'Alice', tie: false } }, no)).toEqual(['voted_out']);
+    expect(voteClips({ ...base, vote: { out: null, tie: true } }, yes)).toEqual(['tie']);
+    expect(voteClips({ ...base, vote: null }, yes)).toBeNull();
+  });
+});
+
 describe('win checks', () => {
   const mk = (roles, deadIdx = []) => roles.map((role, i) => ({ name: `P${i}`, role, alive: !deadIdx.includes(i) }));
 
@@ -347,7 +453,7 @@ describe('night order from ROLE_DEFS', () => {
 
   it('allClipIds covers every narrator clip', () => {
     expect(allClipIds().sort()).toEqual(
-      ['detective_result', 'detective_sleep', 'detective_wake', 'discuss', 'doctor_sleep', 'doctor_wake', 'killed', 'mafia_sleep', 'mafia_wake', 'mafia_win', 'morning', 'night_start', 'pass_hint', 'saved', 'tie', 'villagers_win', 'vote', 'voted_out'].sort()
+      ['detective_result', 'detective_sleep', 'detective_wake', 'discuss', 'doctor_sleep', 'doctor_wake', 'killed', 'mafia_sleep', 'mafia_wake', 'mafia_win', 'morning', 'night_start', 'pass_hint', 'saved', 'detective_found', 'killed_pre', 'killed_post', 'voted_out_pre', 'voted_out_post', 'tie', 'villagers_win', 'vote', 'voted_out'].sort()
     );
   });
 });

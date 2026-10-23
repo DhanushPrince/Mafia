@@ -4,6 +4,7 @@ import { EyeOff, Crown, X, Moon, Volume2 } from 'lucide-react';
 import Card from './Card';
 import { LiquidButton, HoldButton, PrimaryButton } from './ui';
 import { ROLES } from '../game/roles';
+import NameVoiceStatus from './NameVoiceStatus';
 
 const AUTO_HIDE_MS = 3000; // card flips back on its own after this long
 const FLIP_BACK_MS = 700; // let the flip-back animation finish before marking taken
@@ -78,6 +79,7 @@ function DealingScreen({ deck, names, assignments, onAssign, onOpenGameMaster, o
         <p className="text-violet-300/60 font-mono tracking-widest text-sm uppercase">
           Dealt {takenCount} / {deck.length}
         </p>
+        {mode === 'narrator' && <NameVoiceStatus className="mt-2" />}
       </motion.div>
 
       {allDealt && mode === 'narrator' && (

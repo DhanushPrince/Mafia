@@ -4,7 +4,9 @@ import { chromium, webkit, devices } from 'playwright-core';
 import fs from 'node:fs';
 
 const TARGET = process.argv[2] || 'chrome';
-const BASE = (process.env.BASE_URL || 'http://localhost:4174/') + '?fast=1';
+// tts=none forces the name fallback (no in-browser Kokoro download, no speechSynthesis) so the run is
+// deterministic offline; e2e/names-tts.e2e.mjs covers the real Kokoro path.
+const BASE = (process.env.BASE_URL || 'http://localhost:4174/') + '?fast=1&tts=' + (process.env.TTS || 'none');
 const SHOTS = process.env.SHOTS || (TARGET === 'chrome' ? '/workspace/shots/narrator' : `/tmp/narrator-${TARGET}`);
 fs.mkdirSync(SHOTS, { recursive: true });
 const results = [];
@@ -207,6 +209,26 @@ try {
   await page.waitForTimeout(400);
   await shot('05-detective-result');
   ok(await turn('detective').isVisible(), 'detective turn still running while result is shown');
+  ok((await page.getByTestId('detective-result-name').innerText()).includes(mafia), 'investigated name shown above the verdict');
+  {
+    // the result stays up for the rest of the window (no early hide), then clears at the 'sleep' stage
+    const t0 = Date.now();
+    let hiddenEarly = false;
+    for (;;) {
+      const s = await page.evaluate(() => ({
+        stage: document.querySelector('[data-testid="night-turn"]')?.getAttribute('data-stage'),
+        result: Boolean(document.querySelector('[data-testid="detective-result"]')),
+      }));
+      if (s.stage !== 'open') break;
+      if (!s.result) hiddenEarly = true;
+      if (Date.now() - t0 > 15000) break;
+      await page.waitForTimeout(100);
+    }
+    ok(!hiddenEarly, `detective result stayed visible until the window closed (${((Date.now() - t0) / 1000).toFixed(1)}s after the check)`);
+    await turn('detective', 'sleep').waitFor({ timeout: 5000 }).catch(() => {});
+    await page.getByTestId('detective-result').waitFor({ state: 'detached', timeout: 3000 }).catch(() => {});
+    ok((await page.getByTestId('detective-result').count()) === 0, 'detective result cleared once the sleep stage starts');
+  }
 
   // --- morning ---
   await page.getByTestId('morning-victim').waitFor({ timeout: 15000 });
@@ -214,6 +236,8 @@ try {
   ok((await page.locator(`[data-player="${villager}"]`).getAttribute('data-dead')) === 'true', 'victim card greyed / face down');
   await page.waitForFunction(() => document.querySelector('[data-testid="narrator-caption"]')?.innerText.includes('Someone did not survive'), null, { timeout: 8000 });
   ok(true, 'caption shows the "killed" line');
+  ok(await page.getByTestId('morning-detective-found').isVisible(), 'morning screen: "The Detective found a Mafia" (correct guess)');
+  ok(!(await page.getByTestId('morning-detective-found').innerText()).includes(mafia), 'morning detective line does not name the Mafia');
   await page.waitForTimeout(300);
   await shot('06-morning-victim');
 
@@ -222,7 +246,7 @@ try {
   ok((await page.evaluate(() => JSON.parse(localStorage.getItem('mafia-dealer:settings')).muted)) === true, 'mute persisted');
   await tap(page.getByRole('button', { name: 'Unmute narrator' }));
 
-  const expected = ['pass_hint', 'night_start', 'mafia_wake', 'mafia_sleep', 'doctor_wake', 'doctor_sleep', 'detective_wake', 'detective_result', 'detective_sleep', 'morning', 'killed'];
+  const expected = ['pass_hint', 'night_start', 'mafia_wake', 'mafia_sleep', 'doctor_wake', 'doctor_sleep', 'detective_wake', 'detective_result', 'detective_sleep', 'morning', 'killed', 'detective_found'];
   await waitPlayed(expected);
   const missing = expected.filter((id) => !media.includes(`/audio/george/${id}.mp3`));
   ok(missing.length === 0, `audio element requested george clips for night 1${missing.length ? ' (missing: ' + missing.join(',') + ')' : ''}`);

@@ -14,6 +14,7 @@ import {
 } from './game/storage';
 import { reducer as engineReducer, createInitialState, serialize, deserialize, isResumable, isTurnPhase, PHASES, allClipIds } from './game/engine';
 import { narrator } from './audio/narrator';
+import { nameVoice } from './audio/nameVoice';
 import { unlockAmbient } from './audio/ambient';
 import { TIMING } from './game/timing';
 
@@ -94,7 +95,11 @@ function App() {
     setDeck(generateDeck(finalNames.length));
     setAssignments({});
     setEliminated([]);
-    if (settings.mode === 'narrator') dispatch({ type: 'NEW_GAME', rules: { noRepeatSave: settings.noRepeatSave } });
+    if (settings.mode === 'narrator') {
+      dispatch({ type: 'NEW_GAME', rules: { noRepeatSave: settings.noRepeatSave } });
+      // names are known now: load the in-browser voice and synthesise them while the cards are dealt
+      nameVoice.prepare(settings.voice, finalNames);
+    }
     setScreen('dealing');
   };
 
@@ -151,6 +156,7 @@ function App() {
       return;
     }
     prepareAudio();
+    nameVoice.prepare(settings.voice, saved.players.map((p) => p.name));
     dispatch({ type: 'RESTORE', saved });
     setBoundaryKey((k) => k + 1);
     setScreen('narrator');
