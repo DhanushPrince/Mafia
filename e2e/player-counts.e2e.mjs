@@ -146,7 +146,11 @@ async function dealAll(page, tap, n, ok, shotPrefix) {
     const dialog = page.getByRole('dialog');
     await dialog.waitFor();
     const opts = await dialog.locator('div.grid button').allInnerTexts();
-    if (opts.length !== n - i + 1) ok(false, `picker for card ${i} lists ${opts.length} names, expected ${n - i + 1}`);
+    if (opts.length !== n - i + 1) {
+      const dbg = await page.evaluate(() => { const d = document.querySelector('[role="dialog"]'); return { dialog: d ? d.innerText.replace(/\s+/g, ' ').slice(0, 200) : null, op: d ? getComputedStyle(d).opacity : null, cards: [...document.querySelectorAll('[data-card]')].map((c) => c.dataset.card + ':' + c.dataset.state).join(' '), scrollY: window.scrollY }; });
+      await page.screenshot({ path: `/tmp/counts-${TARGET}-${n}-picker${i}.png` }).catch(() => {});
+      ok(false, `picker for card ${i} lists ${opts.length} names, expected ${n - i + 1} ${JSON.stringify(dbg)}`);
+    }
     if (!pickerChecked && n >= 10) {
       pickerChecked = true;
       await page.waitForTimeout(400);
@@ -166,11 +170,11 @@ async function dealAll(page, tap, n, ok, shotPrefix) {
       if (attempt) retries.push(`card ${i} name re-tap #${attempt}`);
       if (await dialog.isVisible().catch(() => false)) await tap(dialog.getByRole('button', { name, exact: true })).catch(() => {});
       // read the text in the same in-page poll that detects it (the bar auto-hides after 3 s)
-      seen = await page.waitForFunction(() => { const el = [...document.querySelectorAll('div, p')].findLast((d) => /, you are/.test(d.textContent)); return el ? el.textContent : false; }, null, { timeout: 2000, polling: 50 })
+      seen = await page.waitForFunction(() => { const el = document.querySelector('[data-testid="reveal-bar"][data-present="true"] p'); return el && /, you are/.test(el.textContent) ? el.textContent : false; }, null, { timeout: 2000, polling: 50 })
         .then((h) => h.jsonValue(), () => false);
     }
     if (!seen) {
-      const st = await page.evaluate(() => ({ cards: [...document.querySelectorAll('[data-card]')].map((c) => c.dataset.card + ':' + c.dataset.state).join(' '), dialog: !!document.querySelector('[role="dialog"]'), body: document.body.innerText.slice(0, 300).replace(/\s+/g, ' ') }));
+      const st = await page.evaluate(() => ({ cards: [...document.querySelectorAll('[data-card]')].map((c) => c.dataset.card + ':' + c.dataset.state + (c.getAttribute('aria-disabled') === 'true' ? '(disabled)' : '')).join(' '), dialog: !!document.querySelector('[role="dialog"]'), body: document.body.innerText.slice(0, 300).replace(/\s+/g, ' ') }));
       throw new Error(`card ${i}: revealed but no "you are" bar after ${Date.now() - t0}ms; state ${JSON.stringify(st)}`);
     }
     const bar = String(seen).trim();

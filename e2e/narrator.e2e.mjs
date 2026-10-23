@@ -143,7 +143,7 @@ try {
     await tap(dialog.getByRole('button', { name, exact: true }));
     await page.locator(`[data-card="${i}"][data-state="revealed"]`).waitFor();
     await page.waitForTimeout(500);
-    const bar = (await page.locator('text=, you are').innerText()).trim();
+    const bar = (await page.locator('[data-testid="reveal-bar"][data-present="true"] >> text=, you are').innerText()).trim();
     map[name] = bar.split('you are')[1].trim().toLowerCase();
     // the card also auto-hides after 3s, so a slow (WebKit) click may find the bar already gone
     await tap(page.getByRole('button', { name: /Hide & Pass/i })).catch(() => {});

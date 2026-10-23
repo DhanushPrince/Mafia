@@ -1,11 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useIsPresent } from 'framer-motion';
 import { EyeOff, Crown, X, Moon, Volume2 } from 'lucide-react';
 import Card from './Card';
 import { LiquidButton, HoldButton, PrimaryButton } from './ui';
 import { ROLES } from '../game/roles';
 import NameVoiceStatus from './NameVoiceStatus';
 import { nameFitClass } from '../game/nameFit';
+
+// An overlay that is animating out stays in the DOM for a moment. It must not take taps or be read
+// out as the current dialog/bar, because the next card's overlay may already be on screen.
+function Exiting({ children }) {
+  const isPresent = useIsPresent();
+  return children(isPresent);
+}
 
 const AUTO_HIDE_MS = 3000; // card flips back on its own after this long
 const FLIP_BACK_MS = 700; // let the flip-back animation finish before marking taken
@@ -172,17 +179,23 @@ function DealingScreen({ deck, names, assignments, onAssign, onOpenGameMaster, o
       {/* "Who are you?" picker */}
       <AnimatePresence>
         {pickerCard !== null && (
+          // keyed per card: a new picker is a fresh element instead of reviving the one still fading
+          // out. Reviving it raced the end of its exit animation on slow WebKit frames and could remove
+          // the new picker, leaving every card locked with no dialog (game stuck mid-deal).
+          <Exiting key={`picker-${pickerCard}`}>{(present) => (
           <motion.div
             key="picker"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-4"
-            onClick={() => setPickerCard(null)}
+            style={present ? undefined : { pointerEvents: 'none' }}
+            aria-hidden={present ? undefined : true}
+            onClick={present ? () => setPickerCard(null) : undefined}
           >
             <motion.div
-              role="dialog"
-              aria-modal="true"
+              role={present ? 'dialog' : undefined}
+              aria-modal={present ? 'true' : undefined}
               aria-labelledby="picker-title"
               initial={{ y: 40, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
@@ -219,14 +232,20 @@ function DealingScreen({ deck, names, assignments, onAssign, onOpenGameMaster, o
               </div>
             </motion.div>
           </motion.div>
+          )}</Exiting>
         )}
       </AnimatePresence>
 
       {/* Hide & pass bar while a card is face-up */}
       <AnimatePresence>
         {revealing && (
+          <Exiting key={`hide-bar-${revealing.index}`}>{(present) => (
           <motion.div
             key="hide-bar"
+            data-testid="reveal-bar"
+            data-present={present}
+            aria-hidden={present ? undefined : true}
+            style={present ? undefined : { pointerEvents: 'none' }}
             initial={{ y: 100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 100, opacity: 0 }}
@@ -256,6 +275,7 @@ function DealingScreen({ deck, names, assignments, onAssign, onOpenGameMaster, o
               </motion.button>
             </div>
           </motion.div>
+          )}</Exiting>
         )}
       </AnimatePresence>
     </div>

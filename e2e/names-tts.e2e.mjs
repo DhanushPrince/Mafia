@@ -56,7 +56,7 @@ async function dealAll() {
     const name = (await dialog.locator('div.grid button').allInnerTexts())[0];
     await dialog.getByRole('button', { name, exact: true }).click();
     await page.locator(`[data-card="${i}"][data-state="revealed"]`).waitFor();
-    map[name] = (await page.locator('text=, you are').innerText()).split('you are')[1].trim().toLowerCase();
+    map[name] = (await page.locator('[data-testid="reveal-bar"][data-present="true"] >> text=, you are').innerText()).split('you are')[1].trim().toLowerCase();
     await page.getByRole('button', { name: /Hide & Pass/i }).click().catch(() => {});
     await page.locator(`[data-card="${i}"][data-state="taken"]`).waitFor({ timeout: 5000 });
   }
