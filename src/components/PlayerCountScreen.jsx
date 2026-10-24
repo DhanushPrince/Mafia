@@ -1,11 +1,28 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { BookOpen, Users, ChevronUp, ChevronDown } from 'lucide-react';
+import { BookOpen, Users, ChevronUp, ChevronDown, Crown, Smartphone, Play, RotateCcw, Timer, Moon, Sun } from 'lucide-react';
+import { narrator, VOICES } from '../audio/narrator';
+
+import { MIN_PLAYERS, MAX_PLAYERS } from '../game/roles';
+import { TURN_OPTIONS_SEC, DISCUSS_OPTIONS_MIN, normalizeTimers, resultMsFor, formatTurn, formatDiscuss } from '../game/timing';
+
+// One shared AudioContext for every tick (browsers cap the number of live contexts).
+let sharedAudioCtx = null;
+const getAudioContext = () => {
+  if (!sharedAudioCtx) {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return null;
+    sharedAudioCtx = new Ctx();
+  }
+  if (sharedAudioCtx.state === 'suspended') sharedAudioCtx.resume();
+  return sharedAudioCtx;
+};
 
 // Synthesized tech tick sound
 const playTickSound = () => {
   try {
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const audioCtx = getAudioContext();
+    if (!audioCtx) return;
     const oscillator = audioCtx.createOscillator();
     const gainNode = audioCtx.createGain();
 
@@ -22,7 +39,7 @@ const playTickSound = () => {
 
     oscillator.start();
     oscillator.stop(audioCtx.currentTime + 0.03);
-  } catch (e) {
+  } catch {
     // Ignore audio errors
   }
 };
@@ -31,7 +48,7 @@ const PlayerCounter = ({ count, onChange }) => {
   const [direction, setDirection] = useState(0);
 
   const updateCount = (newCount) => {
-    if (newCount < 4 || newCount > 20) return;
+    if (newCount < MIN_PLAYERS || newCount > MAX_PLAYERS) return;
     setDirection(newCount > count ? 1 : -1);
     onChange(newCount);
     playTickSound();
@@ -119,6 +136,7 @@ const PlayerCounter = ({ count, onChange }) => {
           <motion.button
             whileHover={{ scale: 1.1, backgroundColor: "rgba(255,255,255,0.1)" }}
             whileTap={{ scale: 0.9 }}
+            aria-label="Increase player count"
             onClick={(e) => { e.preventDefault(); updateCount(count + 1); }}
             className="p-2 rounded-lg bg-white/5 border border-white/10 text-violet-200 hover:text-white transition-colors"
           >
@@ -127,6 +145,7 @@ const PlayerCounter = ({ count, onChange }) => {
           <motion.button
             whileHover={{ scale: 1.1, backgroundColor: "rgba(255,255,255,0.1)" }}
             whileTap={{ scale: 0.9 }}
+            aria-label="Decrease player count"
             onClick={(e) => { e.preventDefault(); updateCount(count - 1); }}
             className="p-2 rounded-lg bg-white/5 border border-white/10 text-violet-200 hover:text-white transition-colors"
           >
@@ -134,13 +153,134 @@ const PlayerCounter = ({ count, onChange }) => {
           </motion.button>
         </div>
       </div>
-      <div className="text-xs text-white/20 font-mono mt-1">MIN: 4 | SWIPE OR CLICK | MAX: 20</div>
+      <output data-testid="player-count" aria-live="polite" className="sr-only">{count}</output>
+      <div className="text-xs text-white/20 font-mono mt-1">MIN: {MIN_PLAYERS} | SWIPE OR TAP | MAX: {MAX_PLAYERS}</div>
     </div>
   );
 };
 
-function PlayerCountScreen({ onStart, onRules }) {
-  const [playerCount, setPlayerCount] = useState(6);
+const Toggle = ({ label, checked, onChange }) => (
+  <label className="flex items-center justify-between gap-3 text-sm text-violet-100/80 cursor-pointer">
+    <span>{label}</span>
+    <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="h-5 w-5 accent-violet-500" />
+  </label>
+);
+
+/** One row of preset chips (a radio group). */
+const PresetRow = ({ label, icon: Icon, options, value, format, onChange, testId }) => (
+  <div className="flex flex-col gap-1.5">
+    <div className="flex items-center gap-1.5 text-xs text-violet-200/70">
+      <Icon size={13} className="text-violet-300/70" /> {label}
+    </div>
+    <div role="radiogroup" aria-label={label} data-testid={testId} className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
+      {options.map((o) => (
+        <button
+          key={o}
+          type="button"
+          role="radio"
+          aria-checked={value === o}
+          onClick={() => onChange(o)}
+          className={`rounded-lg border py-2 text-xs font-bold font-mono tabular-nums transition-colors ${
+            value === o ? 'bg-violet-600/40 border-violet-400/60 text-white' : 'bg-black/20 border-white/10 text-violet-200/70'
+          }`}
+        >
+          {format(o)}
+        </button>
+      ))}
+    </div>
+  </div>
+);
+
+/** Night turn + day discussion length for narrator mode (saved in settings and with the game). */
+function TimerSettings({ settings, onSettings }) {
+  const { turnSec, discussMin } = normalizeTimers(settings);
+  const resultSec = Math.round(resultMsFor(turnSec * 1000) / 1000);
+  return (
+    <div data-testid="timer-settings" className="flex flex-col gap-3 rounded-lg border border-white/10 bg-black/20 p-3">
+      <div className="flex items-center gap-2 text-xs font-mono tracking-widest uppercase text-violet-200/80">
+        <Timer size={14} /> Timers
+      </div>
+      <PresetRow
+        label="Night turn (Mafia, Doctor, Detective)"
+        icon={Moon}
+        options={TURN_OPTIONS_SEC}
+        value={turnSec}
+        format={formatTurn}
+        onChange={(v) => onSettings({ turnSec: v })}
+        testId="turn-length"
+      />
+      <PresetRow
+        label="Day discussion"
+        icon={Sun}
+        options={DISCUSS_OPTIONS_MIN}
+        value={discussMin}
+        format={(m) => `${m}m`}
+        onChange={(v) => onSettings({ discussMin: v })}
+        testId="discuss-length"
+      />
+      <p data-testid="timer-summary" className="text-[11px] leading-snug text-white/40">
+        Each role gets {formatTurn(turnSec)} with eyes open. The Detective sees the answer for at least {resultSec}s. Discussion: {formatDiscuss(discussMin)} (can be skipped).
+      </p>
+    </div>
+  );
+}
+
+/** Mode choice (Human GM vs App narrator) + narrator voice/options. */
+function ModeSettings({ settings, onSettings }) {
+  const narratorMode = settings.mode === 'narrator';
+  const seg = (active) =>
+    `flex-1 flex flex-col items-center gap-1 rounded-lg px-2 py-3 text-xs font-bold uppercase tracking-wider transition-colors border ${
+      active ? 'bg-violet-600/40 border-violet-400/60 text-white' : 'bg-white/5 border-white/10 text-violet-200/70'
+    }`;
+  const preview = (voice) => {
+    narrator.unlock();
+    narrator.stop();
+    narrator.setVoice(voice);
+    narrator.say('night_start');
+  };
+  return (
+    <div className="w-full flex flex-col gap-3">
+      <div className="text-violet-200/80 text-sm font-mono tracking-widest uppercase text-center">Game Master</div>
+      <div role="radiogroup" aria-label="Game mode" className="flex gap-2">
+        <button type="button" role="radio" aria-checked={!narratorMode} className={seg(!narratorMode)} onClick={() => onSettings({ mode: 'human' })}>
+          <Crown size={18} /> Human Game Master
+        </button>
+        <button type="button" role="radio" aria-checked={narratorMode} className={seg(narratorMode)} onClick={() => onSettings({ mode: 'narrator' })}>
+          <Smartphone size={18} /> App is Game Master
+        </button>
+      </div>
+      {narratorMode && (
+        <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/5 p-3">
+          <div className="text-xs text-violet-200/60 text-center">Everyone gets a card. The app narrates the nights.</div>
+          <div role="radiogroup" aria-label="Narrator voice" className="flex gap-2">
+            {Object.values(VOICES).map((v) => (
+              <div key={v.id} className={`flex-1 flex items-center rounded-lg border ${settings.voice === v.id ? 'border-violet-400/60 bg-violet-600/30' : 'border-white/10 bg-black/20'}`}>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={settings.voice === v.id}
+                  onClick={() => onSettings({ voice: v.id })}
+                  className="flex-1 py-2 pl-3 text-left text-sm text-white"
+                >
+                  <span className="font-bold">{v.label}</span> <span className="text-white/50 text-xs">{v.description}</span>
+                </button>
+                <button type="button" aria-label={`Preview ${v.label} voice`} onClick={() => preview(v.id)} className="p-2 text-violet-200/70 hover:text-white">
+                  <Play size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+          <Toggle label="Night ambience (masks taps)" checked={settings.ambient} onChange={(ambient) => onSettings({ ambient })} />
+          <Toggle label="Doctor can't save the same person twice in a row" checked={settings.noRepeatSave} onChange={(noRepeatSave) => onSettings({ noRepeatSave })} />
+          <TimerSettings settings={settings} onSettings={onSettings} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PlayerCountScreen({ initialCount = 6, onStart, onRules, settings, onSettings, resume, onResume }) {
+  const [playerCount, setPlayerCount] = useState(initialCount);
 
   const handleStart = (e) => {
     e.preventDefault();
@@ -150,7 +290,7 @@ function PlayerCountScreen({ onStart, onRules }) {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 relative z-10">
       <motion.button
-        className="absolute top-8 right-8 flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-md hover:bg-white/10 transition-colors text-violet-200"
+        className="absolute top-4 right-4 sm:top-8 sm:right-8 flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-md hover:bg-white/10 transition-colors text-violet-200"
         onClick={onRules}
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
@@ -165,6 +305,15 @@ function PlayerCountScreen({ onStart, onRules }) {
         transition={{ duration: 0.5 }}
         className="w-full max-w-md"
       >
+        {resume && (
+          <button
+            type="button"
+            onClick={onResume}
+            className="mb-6 w-full flex items-center justify-center gap-2 rounded-xl border border-amber-300/40 bg-amber-300/10 px-4 py-3 text-amber-100 font-bold tracking-widest uppercase"
+          >
+            <RotateCcw size={18} /> Resume game <span className="font-normal normal-case tracking-normal text-amber-100/70">({resume})</span>
+          </button>
+        )}
         <h1 className="text-5xl font-bold text-center mb-12 text-transparent bg-clip-text bg-gradient-to-b from-white to-white/50 drop-shadow-[0_0_25px_rgba(255,255,255,0.3)] tracking-tighter">
           MAFIA DEALER
         </h1>
@@ -177,6 +326,8 @@ function PlayerCountScreen({ onStart, onRules }) {
 
               <PlayerCounter count={playerCount} onChange={setPlayerCount} />
 
+              {settings && <ModeSettings settings={settings} onSettings={onSettings} />}
+
               <motion.button
                 type="submit"
                 onClick={handleStart}
@@ -187,7 +338,7 @@ function PlayerCountScreen({ onStart, onRules }) {
               >
                 <div className="absolute inset-0 bg-white/20 translate-y-full hover:translate-y-0 transition-transform duration-300" />
                 <span className="relative z-10 flex items-center justify-center gap-2">
-                  Initialize Game
+                  Next: Player Names
                 </span>
               </motion.button>
             </form>

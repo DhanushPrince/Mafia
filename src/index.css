@@ -2,6 +2,38 @@
 
 @import "tailwindcss";
 
+/* Tailwind v4 does not read tailwind.config.js, so custom animations live here. */
+@theme {
+  --animate-spin-slow: spin 20s linear infinite;
+  --animate-float: float 6s ease-in-out infinite;
+
+  @keyframes float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-20px);
+    }
+  }
+}
+
+/* 3D helpers used by the card flip */
+@utility perspective-1000 {
+  perspective: 1000px;
+}
+
+@utility preserve-3d {
+  -webkit-transform-style: preserve-3d;
+  transform-style: preserve-3d;
+}
+
+/* Safari/WebKit still needs the prefixed property, or the hidden face shows through mirrored */
+@utility backface-hidden {
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
 :root {
   font-family: 'Rajdhani', sans-serif;
   color-scheme: dark;

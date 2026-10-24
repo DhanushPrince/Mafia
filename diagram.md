@@ -1,6 +1,7 @@
 # Mafia Card Dealer — Stack & Architecture
 
-A frontend-only single-page app for dealing Mafia role cards. No backend, database, or API.
+A frontend-only single-page app for dealing Mafia role cards on one phone, with a Game Master (moderator) view.
+No backend, database, or API — the last player count and names are kept in `localStorage`.
 
 ---
 
@@ -10,7 +11,7 @@ A frontend-only single-page app for dealing Mafia role cards. No backend, databa
 flowchart TB
     subgraph build [Build & Deploy]
         Vite[Vite 6]
-        GH[GitHub Pages / gh-pages]
+        CF[Cloudflare Pages — auto-deploy on push to main]
     end
 
     subgraph ui [UI Layer]
@@ -21,17 +22,19 @@ flowchart TB
     end
 
     subgraph app [App Logic]
-        App[App.jsx — screen state]
-        Deck[Role generation + shuffle]
+        App[App.jsx — screen + game state]
+        Roles[game/roles.js — deck, roles, win check]
+        Storage[game/storage.js — localStorage]
     end
 
     Vite --> React
     React --> App
-    App --> Deck
+    App --> Roles
+    App --> Storage
     React --> Tailwind
     React --> Motion
     React --> Lucide
-    Vite --> GH
+    Vite --> CF
 ```
 
 ---
@@ -43,12 +46,13 @@ flowchart TB
 | **Framework** | React 18 | UI components and state |
 | **Bundler / dev server** | Vite 6 | Fast dev, production builds |
 | **Language** | JavaScript (JSX) | No TypeScript |
-| **Styling** | Tailwind CSS 4 | Utility classes (`flex`, `text-white`, etc.) |
-| **CSS pipeline** | PostCSS + Autoprefixer | Processes Tailwind |
+| **Styling** | Tailwind CSS 4 | Utility classes; custom animations via `@theme` in `index.css` |
+| **CSS pipeline** | PostCSS (`@tailwindcss/postcss`) + Autoprefixer | Processes Tailwind |
 | **Animations** | Framer Motion | Card flips, fades, particles, 3D tilt |
-| **Icons** | Lucide React | Skull, User, Search, etc. |
+| **Icons** | Lucide React | Skull, User, HeartPulse, Search, etc. |
 | **Font** | Rajdhani (Google Fonts) | Loaded in `index.css` |
-| **Hosting** | GitHub Pages | Static site from `gh-pages` branch |
+| **Persistence** | `localStorage` | Last player count + names |
+| **Hosting** | Cloudflare Pages | Builds `main` → https://mafia-dealer.pages.dev |
 
 ---
 
@@ -57,24 +61,32 @@ flowchart TB
 ```
 Mafia/
 ├── index.html              # Entry HTML, mounts React at #root
-├── vite.config.js          # Vite config, base path /Mafia/
+├── vite.config.js          # Vite config, base '/'
 ├── package.json            # Dependencies & scripts
-├── tailwind.config.js      # Custom animations (float, spin-slow)
 ├── postcss.config.js       # Tailwind + autoprefixer
-├── rules.png               # Rules image asset
+├── public/
+│   ├── noise.svg           # Local grain texture for the background
+│   └── favicon.svg
+├── rules.png               # Legacy rules image (no longer used by the app)
 └── src/
     ├── main.jsx            # React entry point
-    ├── index.css           # Tailwind import + global styles
-    ├── App.jsx             # Main app logic & screen routing
+    ├── index.css           # Tailwind import, @theme animations, 3D utilities
+    ├── App.jsx             # Screen routing + game state (names, deck, assignments, eliminations)
+    ├── game/
+    │   ├── roles.js        # ROLES visuals, generateDeck, shuffle, getWinner
+    │   └── storage.js      # load/save last game, namesForCount
     └── components/
-        ├── PlayerCountScreen.jsx   # Pick player count
-        ├── DealingScreen.jsx       # Card grid & dealing
-        ├── Card.jsx                # Individual role card
-        ├── RulesScreen.jsx         # Full-screen rules image
-        ├── Rules.jsx               # Detailed rules UI
+        ├── PlayerCountScreen.jsx   # Pick player count (4-20)
+        ├── NamesScreen.jsx         # Game Master enters player names
+        ├── DealingScreen.jsx       # Card grid, "Who are you?" picker, Hide & Pass, GM hold button
+        ├── Card.jsx                # Individual role card (flip, taken-by name)
+        ├── GameMasterScreen.jsx    # Roles, eliminations, live counts, win banner
+        ├── RulesScreen.jsx         # Wraps Rules.jsx
+        ├── Rules.jsx               # Responsive rules UI
+        ├── ui.jsx                  # LiquidButton, PrimaryButton, HoldButton
         ├── Background.jsx          # Animated nebula/particles
-        ├── EndScreen.jsx           # End game screen
-        └── WarpTransition.jsx      # Transition effect
+        ├── EndScreen.jsx           # (unused)
+        └── WarpTransition.jsx      # (unused)
 ```
 
 ---
@@ -86,40 +98,49 @@ Manual routing via React state — no React Router.
 ```mermaid
 stateDiagram-v2
     [*] --> playerCount
-    playerCount --> rules : View Rules
-    rules --> playerCount : Close
-    playerCount --> dealing : Start Game
-    dealing --> playerCount : Restart
+    playerCount --> rules : Rules
+    rules --> playerCount : Close / Got it
+    playerCount --> names : Next - Player Names
+    names --> playerCount : Back
+    names --> dealing : Deal Cards
+    dealing --> playerCount : Start New Game (keeps count + names)
+    dealing --> gm : All dealt + press & hold Game Master
+    gm --> dealing : Back
+    gm --> playerCount : Start New Game (keeps count + names)
 ```
 
 ---
 
-## Game Logic Flow
+## Dealing Flow
 
 ```mermaid
 flowchart LR
-    A[Player enters count] --> B[generateDeck]
-    B --> C{Player count?}
-    C -->|3–6| D[1 Mafia]
-    C -->|7–9| E[2 Mafia + Doctor + Detective]
-    C -->|10+| F[3 Mafia + Doctor + Detective]
-    D --> G[Fill rest with Villagers]
-    E --> G
-    F --> G
-    G --> H[shuffleDeck]
-    H --> I[DealingScreen]
-    I --> J[Player taps card]
-    J --> K[Flip → reveal role]
-    K --> L[Mark card taken after 2s]
+    A[Choose count] --> B[Enter names]
+    B --> C[generateDeck + shuffle]
+    C --> D[Player taps untaken card]
+    D --> E["Who are you? (unassigned names)"]
+    E --> F[Card flips: role shown]
+    F --> G["Hide & Pass (or auto after ~3 s)"]
+    G --> H[Card face-down, shows name, marked taken]
+    H -->|cards left| D
+    H -->|all taken| I[Press & hold Game Master ~1.5 s]
+    I --> J[GM view: toggle eliminated, live counts, win banner]
 ```
 
 ### Role assignment rules
 
-| Players | Roles |
-|---------|-------|
-| 3–6 | 1 Mafia + Villagers |
-| 7–9 | 2 Mafia + Doctor + Detective + Villagers |
-| 10+ | 3 Mafia + Doctor + Detective + Villagers |
+| Players | Mafia | Doctor | Detective | Villagers |
+|---------|-------|--------|-----------|-----------|
+| 4–6 | 1 | 1 | 1 | rest |
+| 7–9 | 2 | 1 | 1 | rest |
+| 10–20 | 3 | 1 | 1 | rest |
+
+The Game Master is not a player and gets no card.
+
+### Win conditions (Game Master view)
+
+- **Villagers win**: every Mafia member is eliminated.
+- **Mafia win**: alive Mafia ≥ alive non-Mafia.
 
 ---
 
@@ -130,15 +151,19 @@ flowchart TD
     App[App.jsx]
     App --> Background
     App --> PlayerCountScreen
+    App --> NamesScreen
     App --> RulesScreen
     App --> DealingScreen
+    App --> GameMasterScreen
+    RulesScreen --> Rules
     DealingScreen --> Card
-    PlayerCountScreen --> Rules
-    RulesScreen --> rules.png
-    Card --> Lucide[Lucide Icons]
-    Card --> Framer[Framer Motion]
-    Background --> Framer
-    DealingScreen --> Framer
+    DealingScreen --> ui[ui.jsx]
+    GameMasterScreen --> ui
+    NamesScreen --> ui
+    Card --> roles[game/roles.js]
+    GameMasterScreen --> roles
+    App --> roles
+    App --> storage[game/storage.js]
 ```
 
 ---
@@ -147,11 +172,10 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    A[Source code] --> B[npm run build]
-    B --> C[dist/ folder]
-    C --> D[npm run deploy]
-    D --> E[gh-pages branch]
-    E --> F[dhanushprince.github.io/Mafia]
+    A[Push / merge to main] --> B[Cloudflare Pages build]
+    B --> C[npm run build]
+    C --> D[dist/]
+    D --> E[mafia-dealer.pages.dev]
 ```
 
 ### Commands
@@ -161,12 +185,8 @@ flowchart LR
 | `npm run dev` | Vite dev server → `localhost:5173` |
 | `npm run build` | Production build → `dist/` |
 | `npm run preview` | Preview production build locally |
-| `npm run deploy` | Build + push `dist/` to `gh-pages` |
 
-### GitHub Pages config
-
-- `vite.config.js` → `base: '/Mafia/'` (asset paths for subpath hosting)
-- `package.json` → `homepage: https://DhanushPrince.github.io/Mafia`
+Deployment has no manual command: Cloudflare Pages deploys `main` automatically.
 
 ---
 
@@ -176,8 +196,8 @@ flowchart LR
 flowchart LR
     A[index.css] --> B["@import tailwindcss"]
     A --> C[Rajdhani font]
-    A --> D[Global dark theme]
-    E[tailwind.config.js] --> F[Custom keyframes: float, spin-slow]
+    A --> D["@theme: animate-spin-slow, animate-float + keyframes"]
+    A --> E["@utility: perspective-1000, preserve-3d"]
     G[postcss.config.js] --> H[Tailwind PostCSS plugin]
     G --> I[Autoprefixer]
     J[Components] --> K[Tailwind utility classes]
@@ -194,7 +214,7 @@ flowchart LR
 | React Router | Manual `screen` state in `App.jsx` |
 | Redux / Zustand | Local `useState` only |
 | Backend / API | Fully static client-side app |
-| Database | No data persistence |
+| Database | Only `localStorage` for last names/count |
 | Testing framework | No Jest/Vitest setup |
 | CSS-in-JS | Tailwind utility classes instead |
 
@@ -206,6 +226,6 @@ flowchart LR
 2. **React** — UI and game state
 3. **Tailwind** — look and layout
 4. **Framer Motion** — motion and polish
-5. **GitHub Pages** — hosts the built static files
+5. **Cloudflare Pages** — hosts the built static files, deploys on push to `main`
 
-This is a **pass-the-phone Mafia card dealer**, not a multiplayer online game.
+This is a **pass-the-phone Mafia card dealer with a moderator view**, not a multiplayer online game.
