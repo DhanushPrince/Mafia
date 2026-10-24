@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
-  DEFAULT_TIMERS, TURN_OPTIONS_SEC, DISCUSS_OPTIONS_MIN, normalizeTimers, timingFor, resultMsFor, isFastMode,
+  DEFAULT_TIMERS, TURN_OPTIONS_SEC, DISCUSS_OPTIONS_MIN, normalizeTimers, timingFor, resultMsFor, isFastMode, remainingMs,
 } from './timing';
 import { loadSettings, saveSettings, DEFAULT_SETTINGS } from './storage';
 import { reducer, createInitialState, serialize, deserialize, PHASES } from './engine';
@@ -45,6 +45,15 @@ describe('timer presets', () => {
     const t = timingFor({ turnSec: 60, discussMin: 10 }, { fast: true });
     expect(t).toMatchObject({ fast: true, turnMs: 3000, resultMs: 1200, discussMs: 4000 });
   });
+});
+
+describe('remainingMs', () => {
+  it('is the full window before it starts', () => expect(remainingMs(null, 0, 30000)).toBe(30000));
+  it('counts down', () => expect(remainingMs(100000, 80000, 30000)).toBe(20000));
+  it('never shows more than the window when the clock is stale (regression: "39" for a 30 s turn)', () => {
+    expect(remainingMs(100000, 61000, 30000)).toBe(30000);
+  });
+  it('never goes negative', () => expect(remainingMs(100000, 120000, 30000)).toBe(0));
 });
 
 describe('timer persistence', () => {

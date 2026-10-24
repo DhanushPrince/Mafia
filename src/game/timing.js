@@ -52,6 +52,12 @@ export function timingFor(timers, { fast = isFastMode() } = {}) {
   return { fast: false, turnMs, resultMs: resultMsFor(turnMs), discussMs: discussMin * 60000, gapMs: NORMAL_GAP_MS, rate: 1 };
 }
 
+/** Time left in a window of `totalMs` ending at `endsAt` (never more than the window, never negative). */
+export function remainingMs(endsAt, now, totalMs) {
+  if (!endsAt) return totalMs;
+  return Math.max(0, Math.min(totalMs, endsAt - now));
+}
+
 /** Default timings (still used for the playback rate and the e2e crash hook). */
 export const TIMING = timingFor(DEFAULT_TIMERS);
 

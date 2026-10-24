@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Volume2, VolumeX, X, Moon, Sun, Skull, HelpCircle, ThumbsUp, ThumbsDown, Timer, Vote, ShieldCheck, Search, Trophy,
@@ -11,7 +11,7 @@ import {
 import { narrator } from '../audio/narrator';
 import { nameVoice, canSpeakName } from '../audio/nameVoice';
 import { startAmbient, stopAmbient } from '../audio/ambient';
-import { TIMING, timingFor } from '../game/timing';
+import { TIMING, timingFor, remainingMs } from '../game/timing';
 import useWakeLock from '../hooks/useWakeLock';
 import { LiquidButton, PrimaryButton } from './ui';
 import { nameFitClass } from '../game/nameFit';
@@ -29,6 +29,11 @@ const NIGHT_PHASES = new Set([PHASES.NIGHT_INTRO, PHASES.MAFIA_TURN, PHASES.DOCT
 
 function useNow(active, every = 200) {
   const [now, setNow] = useState(() => Date.now());
+  // `now` is frozen while inactive: refresh it before paint when a window starts, otherwise the first
+  // frame of a turn shows the stale gap (e.g. "39" for a 30 s turn)
+  useLayoutEffect(() => {
+    if (active) setNow(Date.now());
+  }, [active]);
   useEffect(() => {
     if (!active) return undefined;
     const id = setInterval(() => setNow(Date.now()), every);
@@ -106,7 +111,7 @@ function NightTurn({ state, dispatch, stage, endsAt, now, showResult, timing }) 
   const titles = TURN_TITLES[role] || { wake: 'Open your eyes', hint: 'Tap a name' };
   const targets = selectTargets(state);
   const selected = selectCurrentSelection(state);
-  const remaining = endsAt ? Math.max(0, endsAt - now) : timing.turnMs;
+  const remaining = remainingMs(endsAt, now, timing.turnMs);
   // detective result needs time to be read, so the detective's taps close resultMs before the end
   const detectiveLocked = role === 'detective' && (Boolean(selected) || remaining < timing.resultMs);
   const canTap = stage === 'open' && !detectiveLocked;
@@ -253,7 +258,7 @@ function Discuss({ state, dispatch, endsAt, now, timing }) {
         <h2 className="text-4xl font-bold text-white">Discussion</h2>
         <p className="text-violet-200/70 text-center">Talk it over. Who is the Mafia?</p>
         <div data-testid="discuss-timer" className="flex items-center gap-3 font-mono text-6xl text-white tabular-nums">
-          <Timer className="w-10 h-10 text-violet-300/70" /> {fmt(endsAt ? endsAt - now : timing.discussMs)}
+          <Timer className="w-10 h-10 text-violet-300/70" /> {fmt(remainingMs(endsAt, now, timing.discussMs))}
         </div>
         <PlayerTiles players={state.players} />
         <PrimaryButton type="button" onClick={() => dispatch({ type: 'ADVANCE', from: state.phase })}>Skip to vote</PrimaryButton>
