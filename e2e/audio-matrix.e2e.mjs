@@ -4,14 +4,15 @@
 //    of a dead role, detective result, morning, kill/saved summary, detective_found only when a living
 //    Detective checked a real Mafia, discuss, vote, vote outcome, winner) and nothing unexpected plays
 //  - every clip actually started and finished (no rejected play(), no media error, no 4xx on /audio/)
-//  - clips come from the selected voice's folder
+//  - clips come from the selected voice's folder (george/heart = English, ta_rasa/ta_jaya = Tamil)
 //  - no two sounds overlap and no clip is cut off
 //  - the spoken name (Kokoro run) is the right player for that round; with tts=none the generic
 //    "look at the screen" line is used and the screen shows the right player
-// Before the games it fetches every clip in lines.json for both voices.
+// Before the games it fetches every clip in lines.json for all four voice folders.
 //
 // Usage: node e2e/audio-matrix.e2e.mjs [chrome|chromium-pixel7|webkit-iphone13]
-//   COUNTS=4,5,6,7,8,9,10,12,15,20  VOICES=george,heart  TTS=none|auto|off  FAST=1|0  TURN=10s
+//   COUNTS=4,5,6,7,8,9,10,12,15,20  VOICES=george,heart,ta_rasa,ta_jaya  TTS=none|auto|off  FAST=1|0  TURN=10s
+//   MODEL=remote (fetch the Piper Tamil model from huggingface.co instead of the local copy)
 //   OUT=/workspace/shots/audio   (needs `vite preview --port 4174`)
 import fs from 'node:fs';
 import { launch, newPage, tapper, setup, dealAll, pullEvents, waitAudioIdle, NAME_POOL } from './lib/harness.mjs';
@@ -29,6 +30,7 @@ const OUT = process.env.OUT || '/workspace/shots/audio';
 const TAG = process.env.TAG || `${TARGET}-tts_${TTS}${FAST ? '' : '-realtime'}`;
 fs.mkdirSync(`${OUT}/logs`, { recursive: true });
 const LINES = JSON.parse(fs.readFileSync(new URL('../src/audio/lines.json', import.meta.url)));
+const FOLDERS = ['george', 'heart', 'ta_rasa', 'ta_jaya'];
 const PLAN = { 4: 'villagers', 5: 'mafia', 6: 'villagers', 7: 'mafia', 8: 'villagers', 9: 'mafia', 10: 'villagers', 12: 'mafia', 15: 'villagers', 20: 'mafia' };
 const ROLE_ORDER = ['mafia', 'doctor', 'detective'];
 const T0 = Date.now();
@@ -37,7 +39,7 @@ const log = (...a) => console.log(`[${((Date.now() - T0) / 1000).toFixed(0)}s]`,
 // ---------- every clip file exists for both voices ----------
 async function checkFiles() {
   const missing = [];
-  for (const voice of ['george', 'heart']) {
+  for (const voice of FOLDERS) {
     for (const id of Object.keys(LINES)) {
       const r = await fetch(`${ORIGIN}audio/${voice}/${id}.mp3`);
       const type = r.headers.get('content-type') || '';
@@ -45,7 +47,7 @@ async function checkFiles() {
       if (r.status !== 200 || !/audio|mpeg/.test(type) || len < 1000) missing.push(`${voice}/${id}.mp3 HTTP ${r.status} ${type} ${len}B`);
     }
   }
-  return { total: Object.keys(LINES).length * 2, missing };
+  return { total: Object.keys(LINES).length * FOLDERS.length, missing };
 }
 
 // ---------- analysis of the event log ----------
