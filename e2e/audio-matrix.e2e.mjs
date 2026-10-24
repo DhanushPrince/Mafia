@@ -256,6 +256,7 @@ async function game(browser, ctxOpts, n, voice) {
   }
   const bad404 = audioResponses.filter((r) => r.status >= 400);
   const ctxStarts = events.filter((e) => e.type === 'ctx-start').length;
+  const lags = events.filter((e) => e.type === 'lag').map((e) => e.ms);
   const ok = issues.length === 0 && a.problems.length === 0 && a.overlaps.length === 0 && a.cuts.length === 0 && bad404.length === 0 && nameOk && errors.length === 0 && failed.length === 0;
   const res = {
     target: TARGET, voice, n, tts: TTS, fast: FAST, plan, outcome, rounds, ok,
@@ -263,7 +264,7 @@ async function game(browser, ctxOpts, n, voice) {
     failures: a.failures + bad404.length, overlaps: a.overlaps, cuts: a.cuts, nameOk,
     nameFallback: spoken ? (a.names.kinds.join('+') || 'none') : 'generic line (tts=none)',
     nameStatus, coverage, screenNames, issues, problems: a.problems, http404: bad404, consoleErrors: errors, failedRequests: failed,
-    maxStartLatencyMs: a.maxStartLatencyMs, webAudioStarts: ctxStarts, got: a.got, want: a.want,
+    maxStartLatencyMs: a.maxStartLatencyMs, webAudioStarts: ctxStarts, pageStalls: lags.length, maxStallMs: lags.length ? Math.max(...lags) : 0, got: a.got, want: a.want,
   };
   fs.writeFileSync(`${OUT}/logs/${TAG}-${voice}-${n}.json`, JSON.stringify({ ...res, events }, null, 1));
   await ctx.close();
@@ -280,7 +281,7 @@ for (const voice of VOICES) {
     const r = await game(browser, ctxOpts, n, voice);
     r.secs = Math.round((Date.now() - t0) / 1000);
     all.push(r);
-    log(`${TARGET} ${voice} N=${n} ${r.ok ? 'OK' : 'FAIL'} clips ${r.clips} fail=${r.failures} overlaps=${r.overlaps.length} cuts=${r.cuts.length} name=${r.nameOk ? 'ok' : 'WRONG'} (${r.nameFallback}) outcome=${r.outcome} rounds=${r.rounds} ${r.secs}s`);
+    log(`${TARGET} ${voice} N=${n} ${r.ok ? 'OK' : 'FAIL'} clips ${r.clips} fail=${r.failures} overlaps=${r.overlaps.length} cuts=${r.cuts.length} name=${r.nameOk ? 'ok' : 'WRONG'} (${r.nameFallback}) outcome=${r.outcome} rounds=${r.rounds} ${r.secs}s${r.pageStalls ? ` page-stalls=${r.pageStalls} (max ${(r.maxStallMs / 1000).toFixed(1)}s)` : ''}`);
     [...r.issues, ...r.problems, ...r.overlaps, ...r.cuts, ...r.consoleErrors.slice(0, 3), ...r.failedRequests.slice(0, 3)].forEach((x) => log('   ', x));
   }
 }

@@ -30,6 +30,9 @@ export function audioInitScript() {
   const now = () => Math.round(performance.now());
   const log = (type, d = {}) => ev.push({ type, t: now(), ...d });
   window.__alog = log;
+  // main-thread heartbeat: a 'lag' event whenever a 100 ms timer fires > 1 s late (page/renderer stalled)
+  let beat = performance.now();
+  setInterval(() => { const t = performance.now(); if (t - beat > 1100) log('lag', { ms: Math.round(t - beat - 100) }); beat = t; }, 100);
   let nextId = 1;
   const srcOf = (el) => {
     // el.src updates synchronously when the narrator switches clips (currentSrc only after loading)
