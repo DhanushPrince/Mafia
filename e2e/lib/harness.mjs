@@ -32,8 +32,9 @@ export function audioInitScript() {
   window.__alog = log;
   let nextId = 1;
   const srcOf = (el) => {
-    const s = el.currentSrc || el.src || '';
-    if (s.startsWith('blob:') ) return s;
+    // el.src updates synchronously when the narrator switches clips (currentSrc only after loading)
+    const s = el.src || el.currentSrc || '';
+    if (s.startsWith('blob:')) return s;
     if (s.startsWith('data:')) return 'data:';
     try { return new URL(s, location.href).pathname; } catch { return s; }
   };
