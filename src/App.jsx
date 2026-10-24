@@ -96,7 +96,11 @@ function App() {
     setAssignments({});
     setEliminated([]);
     if (settings.mode === 'narrator') {
-      dispatch({ type: 'NEW_GAME', rules: { noRepeatSave: settings.noRepeatSave } });
+      dispatch({
+        type: 'NEW_GAME',
+        rules: { noRepeatSave: settings.noRepeatSave },
+        timers: { turnSec: settings.turnSec, discussMin: settings.discussMin },
+      });
       // names are known now: load the in-browser voice and synthesise them while the cards are dealt
       nameVoice.prepare(settings.voice, finalNames);
     }

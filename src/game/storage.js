@@ -1,4 +1,5 @@
 import { MIN_PLAYERS, MAX_PLAYERS } from './roles';
+import { DEFAULT_TIMERS, normalizeTimers } from './timing';
 
 const KEY = 'mafia-dealer:last-game';
 
@@ -54,6 +55,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   muted: false,
   ambient: true,
   noRepeatSave: true,
+  turnSec: DEFAULT_TIMERS.turnSec, // night role turn length (narrator mode)
+  discussMin: DEFAULT_TIMERS.discussMin, // day discussion length (narrator mode)
 });
 
 export function loadSettings() {
@@ -66,6 +69,7 @@ export function loadSettings() {
       muted: data.muted === true,
       ambient: data.ambient !== false,
       noRepeatSave: data.noRepeatSave !== false,
+      ...normalizeTimers(data),
     };
   } catch {
     return { ...DEFAULT_SETTINGS };

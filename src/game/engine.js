@@ -14,6 +14,7 @@
  * dealt this game gets a turn (even when all its players are dead, so nobody learns that).
  */
 import { ROLE_DEFS } from './roles';
+import { normalizeTimers } from './timing';
 
 export const ENGINE_VERSION = 1;
 
@@ -53,11 +54,12 @@ export function nightOrderFor(dealtRoles, defs = ROLE_DEFS) {
 
 const emptyNight = () => ({ selections: {}, result: null });
 
-export function createInitialState(rules = {}) {
+export function createInitialState(rules = {}, timers = undefined) {
   return {
     version: ENGINE_VERSION,
     phase: PHASES.SETUP,
     rules: { ...DEFAULT_RULES, ...rules },
+    timers: normalizeTimers(timers), // { turnSec, discussMin } chosen at setup; saved with the game
     players: [], // [{ name, role, alive }]
     nightOrder: [], // role ids with a night turn this game
     round: 0, // night/day counter, 1-based once the first night starts
@@ -301,7 +303,7 @@ export function reducer(state, action) {
       return createInitialState({ ...state.rules, ...(action.rules || {}) });
 
     case 'NEW_GAME': // SETUP -> DEAL
-      return { ...createInitialState({ ...state.rules, ...(action.rules || {}) }), phase: PHASES.DEAL };
+      return { ...createInitialState({ ...state.rules, ...(action.rules || {}) }, action.timers ?? state.timers), phase: PHASES.DEAL };
 
     case 'RESTORE': {
       const restored = deserialize(action.saved);
@@ -384,8 +386,9 @@ export function deserialize(raw) {
     if (!Array.isArray(data.players) || !data.players.every((p) => p && typeof p.name === 'string' && defFor(p.role) && typeof p.alive === 'boolean')) return null;
     if (!Array.isArray(data.nightOrder) || !data.nightOrder.every((r) => defFor(r))) return null;
     if (!data.night || typeof data.night.selections !== 'object' || !Array.isArray(data.log)) return null;
-    const base = createInitialState(data.rules);
-    return { ...base, ...data, rules: { ...base.rules, ...(data.rules || {}) } };
+    const base = createInitialState(data.rules, data.timers);
+    // saves from before configurable timers have no `timers`: they get the defaults
+    return { ...base, ...data, rules: { ...base.rules, ...(data.rules || {}) }, timers: base.timers };
   } catch {
     return null;
   }

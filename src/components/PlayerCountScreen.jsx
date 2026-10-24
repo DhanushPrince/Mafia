@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { BookOpen, Users, ChevronUp, ChevronDown, Crown, Smartphone, Play, RotateCcw } from 'lucide-react';
+import { BookOpen, Users, ChevronUp, ChevronDown, Crown, Smartphone, Play, RotateCcw, Timer, Moon, Sun } from 'lucide-react';
 import { narrator, VOICES } from '../audio/narrator';
 
 import { MIN_PLAYERS, MAX_PLAYERS } from '../game/roles';
+import { TURN_OPTIONS_SEC, DISCUSS_OPTIONS_MIN, normalizeTimers, resultMsFor, formatTurn, formatDiscuss } from '../game/timing';
 
 // One shared AudioContext for every tick (browsers cap the number of live contexts).
 let sharedAudioCtx = null;
@@ -165,6 +166,65 @@ const Toggle = ({ label, checked, onChange }) => (
   </label>
 );
 
+/** One row of preset chips (a radio group). */
+const PresetRow = ({ label, icon: Icon, options, value, format, onChange, testId }) => (
+  <div className="flex flex-col gap-1.5">
+    <div className="flex items-center gap-1.5 text-xs text-violet-200/70">
+      <Icon size={13} className="text-violet-300/70" /> {label}
+    </div>
+    <div role="radiogroup" aria-label={label} data-testid={testId} className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
+      {options.map((o) => (
+        <button
+          key={o}
+          type="button"
+          role="radio"
+          aria-checked={value === o}
+          onClick={() => onChange(o)}
+          className={`rounded-lg border py-2 text-xs font-bold font-mono tabular-nums transition-colors ${
+            value === o ? 'bg-violet-600/40 border-violet-400/60 text-white' : 'bg-black/20 border-white/10 text-violet-200/70'
+          }`}
+        >
+          {format(o)}
+        </button>
+      ))}
+    </div>
+  </div>
+);
+
+/** Night turn + day discussion length for narrator mode (saved in settings and with the game). */
+function TimerSettings({ settings, onSettings }) {
+  const { turnSec, discussMin } = normalizeTimers(settings);
+  const resultSec = Math.round(resultMsFor(turnSec * 1000) / 1000);
+  return (
+    <div data-testid="timer-settings" className="flex flex-col gap-3 rounded-lg border border-white/10 bg-black/20 p-3">
+      <div className="flex items-center gap-2 text-xs font-mono tracking-widest uppercase text-violet-200/80">
+        <Timer size={14} /> Timers
+      </div>
+      <PresetRow
+        label="Night turn (Mafia, Doctor, Detective)"
+        icon={Moon}
+        options={TURN_OPTIONS_SEC}
+        value={turnSec}
+        format={formatTurn}
+        onChange={(v) => onSettings({ turnSec: v })}
+        testId="turn-length"
+      />
+      <PresetRow
+        label="Day discussion"
+        icon={Sun}
+        options={DISCUSS_OPTIONS_MIN}
+        value={discussMin}
+        format={(m) => `${m}m`}
+        onChange={(v) => onSettings({ discussMin: v })}
+        testId="discuss-length"
+      />
+      <p data-testid="timer-summary" className="text-[11px] leading-snug text-white/40">
+        Each role gets {formatTurn(turnSec)} with eyes open. The Detective sees the answer for at least {resultSec}s. Discussion: {formatDiscuss(discussMin)} (can be skipped).
+      </p>
+    </div>
+  );
+}
+
 /** Mode choice (Human GM vs App narrator) + narrator voice/options. */
 function ModeSettings({ settings, onSettings }) {
   const narratorMode = settings.mode === 'narrator';
@@ -212,6 +272,7 @@ function ModeSettings({ settings, onSettings }) {
           </div>
           <Toggle label="Night ambience (masks taps)" checked={settings.ambient} onChange={(ambient) => onSettings({ ambient })} />
           <Toggle label="Doctor can't save the same person twice in a row" checked={settings.noRepeatSave} onChange={(noRepeatSave) => onSettings({ noRepeatSave })} />
+          <TimerSettings settings={settings} onSettings={onSettings} />
         </div>
       )}
     </div>

@@ -11,7 +11,7 @@ import {
 import { narrator } from '../audio/narrator';
 import { nameVoice, canSpeakName } from '../audio/nameVoice';
 import { startAmbient, stopAmbient } from '../audio/ambient';
-import { TIMING } from '../game/timing';
+import { TIMING, timingFor } from '../game/timing';
 import useWakeLock from '../hooks/useWakeLock';
 import { LiquidButton, PrimaryButton } from './ui';
 import { nameFitClass } from '../game/nameFit';
@@ -101,14 +101,14 @@ function Header({ state, night, muted, onToggleMute, onQuit }) {
 }
 
 /** Dark, low-contrast screen shared by every night turn (identical layout for all roles). */
-function NightTurn({ state, dispatch, stage, endsAt, now, showResult }) {
+function NightTurn({ state, dispatch, stage, endsAt, now, showResult, timing }) {
   const role = currentTurnRole(state);
   const titles = TURN_TITLES[role] || { wake: 'Open your eyes', hint: 'Tap a name' };
   const targets = selectTargets(state);
   const selected = selectCurrentSelection(state);
-  const remaining = endsAt ? Math.max(0, endsAt - now) : TIMING.turnMs;
+  const remaining = endsAt ? Math.max(0, endsAt - now) : timing.turnMs;
   // detective result needs time to be read, so the detective's taps close resultMs before the end
-  const detectiveLocked = role === 'detective' && (Boolean(selected) || remaining < TIMING.resultMs);
+  const detectiveLocked = role === 'detective' && (Boolean(selected) || remaining < timing.resultMs);
   const canTap = stage === 'open' && !detectiveLocked;
   return (
     <div data-testid="night-turn" data-role={role} data-stage={stage} className="fixed inset-0 z-40 bg-black flex flex-col items-center px-4 pt-20 pb-24 overflow-y-auto">
@@ -246,14 +246,14 @@ function Morning({ state, dispatch }) {
   );
 }
 
-function Discuss({ state, dispatch, endsAt, now }) {
+function Discuss({ state, dispatch, endsAt, now, timing }) {
   return (
     <div className="min-h-screen flex flex-col items-center px-4 pt-20 pb-28">
       <div className="w-full max-w-md flex flex-col items-center gap-5">
         <h2 className="text-4xl font-bold text-white">Discussion</h2>
         <p className="text-violet-200/70 text-center">Talk it over. Who is the Mafia?</p>
         <div data-testid="discuss-timer" className="flex items-center gap-3 font-mono text-6xl text-white tabular-nums">
-          <Timer className="w-10 h-10 text-violet-300/70" /> {fmt(endsAt ? endsAt - now : TIMING.discussMs)}
+          <Timer className="w-10 h-10 text-violet-300/70" /> {fmt(endsAt ? endsAt - now : timing.discussMs)}
         </div>
         <PlayerTiles players={state.players} />
         <PrimaryButton type="button" onClick={() => dispatch({ type: 'ADVANCE', from: state.phase })}>Skip to vote</PrimaryButton>
@@ -398,6 +398,7 @@ function NarratorGame({ state, dispatch, settings, onSettings, onRestart }) {
   const now = useNow(endsAt !== null);
   const stateRef = useRef(state);
   stateRef.current = state;
+  const timing = timingFor(state.timers);
 
   // e2e hook (only with ?fast=1): window.__forceCrash = true makes this screen throw
   if (TIMING.fast && typeof window !== 'undefined' && window.__forceCrash) {
@@ -412,6 +413,7 @@ function NarratorGame({ state, dispatch, settings, onSettings, onRestart }) {
     const wait = (ms) => new Promise((r) => ctl.timers.push(setTimeout(r, ms)));
     const s = stateRef.current;
     const phase = s.phase;
+    const T = timingFor(s.timers); // chosen at setup (saved with the game); ?fast=1 overrides
     setStage(null);
     setEndsAt(null);
     setShowResult(null);
@@ -424,7 +426,7 @@ function NarratorGame({ state, dispatch, settings, onSettings, onRestart }) {
       if (phase === PHASES.NIGHT_INTRO) {
         await narrator.say(entryClips(s));
         if (ctl.cancelled) return;
-        await wait(TIMING.gapMs);
+        await wait(T.gapMs);
         if (!ctl.cancelled) dispatch({ type: 'ADVANCE', from: phase });
         return;
       }
@@ -433,24 +435,24 @@ function NarratorGame({ state, dispatch, settings, onSettings, onRestart }) {
         await narrator.say(entryClips(s));
         if (ctl.cancelled) return;
         // the window is the same length whatever happens; taps never end it early
-        setEndsAt(Date.now() + TIMING.turnMs);
+        setEndsAt(Date.now() + T.turnMs);
         setStage('open');
-        await wait(TIMING.turnMs);
+        await wait(T.turnMs);
         if (ctl.cancelled) return;
         setShowResult(null);
         setEndsAt(null);
         setStage('sleep');
         await narrator.say(exitClips(phase));
         if (ctl.cancelled) return;
-        await wait(TIMING.gapMs);
+        await wait(T.gapMs);
         if (!ctl.cancelled) dispatch({ type: 'ADVANCE', from: phase });
         return;
       }
       if (phase === PHASES.DAY_DISCUSS) {
         await narrator.say(entryClips(s));
         if (ctl.cancelled) return;
-        setEndsAt(Date.now() + TIMING.discussMs);
-        await wait(TIMING.discussMs);
+        setEndsAt(Date.now() + T.discussMs);
+        await wait(T.discussMs);
         if (!ctl.cancelled) dispatch({ type: 'ADVANCE', from: phase });
         return;
       }
@@ -505,14 +507,14 @@ function NarratorGame({ state, dispatch, settings, onSettings, onRestart }) {
   let body = null;
   if (state.phase === PHASES.NIGHT_INTRO) body = <NightIntro state={state} />;
   else if (isTurnPhase(state.phase))
-    body = <NightTurn state={state} dispatch={dispatch} stage={stage || 'wake'} endsAt={endsAt} now={now} showResult={showResult} />;
+    body = <NightTurn state={state} dispatch={dispatch} stage={stage || 'wake'} endsAt={endsAt} now={now} showResult={showResult} timing={timing} />;
   else if (state.phase === PHASES.MORNING) body = <Morning state={state} dispatch={dispatch} />;
-  else if (state.phase === PHASES.DAY_DISCUSS) body = <Discuss state={state} dispatch={dispatch} endsAt={endsAt} now={now} />;
+  else if (state.phase === PHASES.DAY_DISCUSS) body = <Discuss state={state} dispatch={dispatch} endsAt={endsAt} now={now} timing={timing} />;
   else if (state.phase === PHASES.VOTE) body = <VoteScreen key={state.round} state={state} dispatch={dispatch} onContinue={continueAfterVote} />;
   else if (state.phase === PHASES.END) body = <EndScreen state={state} onRestart={onRestart} />;
 
   return (
-    <div data-testid="narrator-game" data-phase={state.phase} className="relative min-h-screen">
+    <div data-testid="narrator-game" data-phase={state.phase} data-turn-ms={timing.turnMs} data-discuss-ms={timing.discussMs} className="relative min-h-screen">
       <Header state={state} night={dark} muted={settings.muted} onToggleMute={() => onSettings({ muted: !settings.muted })} onQuit={onRestart} />
       {body}
       <Caption night={dark} inline={state.phase === PHASES.END} />
