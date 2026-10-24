@@ -1,11 +1,35 @@
 import LINES from './lines.json';
+import LINES_TA from './lines.ta.json';
 import { nameVoice, speakName } from './nameVoice';
 
-export { LINES };
-export const VOICES = {
-  george: { id: 'george', label: 'George', description: 'Male' },
-  heart: { id: 'heart', label: 'Heart', description: 'Female' },
+export { LINES, LINES_TA };
+
+/** Narrator languages. Tamil is the default. */
+export const LANGS = {
+  ta: { id: 'ta', label: 'தமிழ்', description: 'Tamil' },
+  en: { id: 'en', label: 'English', description: 'English' },
 };
+export const DEFAULT_LANG = 'ta';
+export const normalizeLang = (lang) => (LANGS[lang] ? lang : DEFAULT_LANG);
+
+/**
+ * The voice setting is the narrator's gender ('george' = male, 'heart' = female, kept for old saves);
+ * the clip folder under public/audio/ depends on the language too.
+ *  en: Kokoro bm_george / af_heart.   ta: Piper Tamil Rasa male / AI4Bharat Indic Parler-TTS 'jaya' female.
+ */
+export const VOICES = {
+  george: { id: 'george', label: 'George', description: 'Male', lang: 'en', gender: 'george' },
+  heart: { id: 'heart', label: 'Heart', description: 'Female', lang: 'en', gender: 'heart' },
+  ta_rasa: { id: 'ta_rasa', label: 'Rasa', description: 'ஆண் · Male', lang: 'ta', gender: 'george' },
+  ta_jaya: { id: 'ta_jaya', label: 'Jaya', description: 'பெண் · Female', lang: 'ta', gender: 'heart' },
+};
+const FOLDERS = { en: { george: 'george', heart: 'heart' }, ta: { george: 'ta_rasa', heart: 'ta_jaya' } };
+
+/** Narrator voice (= clip folder) for a language + gender setting, e.g. ('ta', 'heart') -> 'ta_jaya'. */
+export const narratorVoice = (lang, gender) => FOLDERS[normalizeLang(lang)][gender === 'heart' ? 'heart' : 'george'];
+export const voicesFor = (lang) => Object.values(VOICES).filter((v) => v.lang === normalizeLang(lang));
+export const linesFor = (voice) => (VOICES[voice]?.lang === 'ta' ? LINES_TA : LINES);
+export const clipUrl = (voice, id) => `/audio/${voice}/${id}.mp3`;
 
 // 44-byte silent WAV, played on the user's first tap to unlock the shared element (iOS/Android autoplay).
 const NAME_GAP_MS = 150;
@@ -54,7 +78,11 @@ class Narrator {
   }
 
   url(id) {
-    return `/audio/${this.voice}/${id}.mp3`;
+    return clipUrl(this.voice, id);
+  }
+
+  lines() {
+    return linesFor(this.voice);
   }
 
   /** Call synchronously inside a user gesture (e.g. the "Start night" tap). */
@@ -113,7 +141,8 @@ class Narrator {
   playName(name, gen) {
     this.setCaption(`${this.caption} ${name}`.trim());
     const url = nameVoice.get(this.voice, name);
-    const speak = () => (gen === this.generation ? speakName(name, { rate: this.rate, muted: this.muted }) : undefined);
+    const lang = VOICES[this.voice]?.lang || 'en';
+    const speak = () => (gen === this.generation ? speakName(name, { rate: this.rate, muted: this.muted, lang }) : undefined);
     if (!url) return Promise.resolve(speak());
     // a broken blob falls back to the browser's speech for just the name
     return this.playOne(null, gen, true, url).then((ok) => (ok === false ? speak() : undefined));
@@ -121,7 +150,8 @@ class Narrator {
 
   playOne(id, gen, append = false, srcOverride = null) {
     const a = this.el();
-    if (id !== null) this.setCaption(append ? `${this.caption} ${LINES[id] || ''}`.trim() : LINES[id] || '');
+    const lines = this.lines();
+    if (id !== null) this.setCaption(append ? `${this.caption} ${lines[id] || ''}`.trim() : lines[id] || '');
     if (!a) return Promise.resolve();
     return new Promise((resolve) => {
       let done = false;
@@ -179,7 +209,7 @@ class Narrator {
     this.preloaded = this.preloaded || new Set();
     return Promise.all(
       ids.map((id) => {
-        const url = `/audio/${voice}/${id}.mp3`;
+        const url = clipUrl(voice, id);
         if (this.preloaded.has(url)) return null;
         this.preloaded.add(url);
         return fetch(url).then((r) => r.blob()).catch(() => this.preloaded.delete(url));

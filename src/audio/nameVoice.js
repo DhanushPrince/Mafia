@@ -1,7 +1,11 @@
 /**
  * Player-name voice for narrator mode. Names are typed by the players, so they can't be pre-rendered:
- * Kokoro-82M runs in the browser (kokoro-js in a Web Worker, loaded lazily) with the same voice as the
- * fixed clips, and each name is synthesised once during dealing. Results are kept in memory (object URLs)
+ * a TTS model runs in the browser in a Web Worker (loaded lazily, only for the selected narrator voice) and
+ * each name is synthesised once during dealing:
+ *  - English: Kokoro-82M (kokoro-js) with the same voice as the fixed clips (bm_george / af_heart)
+ *  - Tamil: Piper Tamil Rasa (tinisoft, trained on AI4Bharat Rasa, CC-BY-4.0, ~61 MB ONNX) - Rasa male for the
+ *    male narrator, Rasa female for the female narrator (whose fixed clips are Indic Parler-TTS 'jaya').
+ *    Latin-script names are converted to Tamil script first (tamilTranslit.js). Results are kept in memory (object URLs)
  * and in the Cache API (keyed by voice + name) so repeat games are instant.
  *
  * Never blocks the game: if a name isn't ready, the narration falls back (see engine sequence builders).
@@ -10,9 +14,28 @@
  *            ?tts=none -> no Kokoro and no speechSynthesis (fixed "Look at the screen" lines)
  *            ?tts=webgpu -> try WebGPU (fp32 model, ~326 MB) instead of wasm q8 (~92 MB)
  */
+import { toTamilScript } from './tamilTranslit';
+
 export const KOKORO_VOICES = { george: 'bm_george', heart: 'af_heart' };
+export const PIPER_VOICES = { ta_rasa: 'rasa_male', ta_jaya: 'rasa_female' };
+export const piperModelUrl = (v) => `https://huggingface.co/tinisoft/piper-ta_IN-${v}-medium/resolve/main/ta_IN-${v}-medium.onnx`;
+const PIPER_ASSETS = { wasmUrl: '/tts/piper_phonemize.wasm', dataUrl: '/tts/piper_phonemize_ta.data' };
 const CACHE_NAME = 'mafia-name-voice-v1';
 const SPEED = 0.95;
+
+/** Which in-browser engine speaks names for a narrator voice, and the exact text it is given. */
+export function nameEngine(voice) {
+  if (KOKORO_VOICES[voice]) return { engine: 'kokoro', voice: KOKORO_VOICES[voice] };
+  if (PIPER_VOICES[voice]) return { engine: 'piper', voice: PIPER_VOICES[voice], model: piperModelUrl(PIPER_VOICES[voice]) };
+  return null;
+}
+
+// a trailing full stop gives a natural, complete intonation for a name said on its own (Piper otherwise
+// cuts single words short: கார்த்திக் -> "கார்")
+export const nameText = (voice, name) => {
+  const n = String(name || '').trim();
+  return PIPER_VOICES[voice] ? `${toTamilScript(n)}.` : `${n}.`;
+};
 
 const param = () => (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('tts') : null);
 export const ttsMode = () => param() || 'auto';
@@ -51,7 +74,7 @@ class NameVoice {
   constructor() {
     this.urls = new Map(); // `${voice}|${name}` -> object URL
     this.listeners = new Set();
-    this.worker = null;
+    this.workers = {}; // engine -> Worker
     this.reqId = 0;
     this.pending = new Map();
     this.files = {}; // model download progress per file
@@ -85,10 +108,14 @@ class NameVoice {
     return m !== 'off' && m !== 'none' && typeof Worker !== 'undefined';
   }
 
-  ensureWorker() {
-    if (this.worker) return this.worker;
-    this.worker = new Worker(new URL('./nameVoice.worker.js', import.meta.url), { type: 'module' });
-    this.worker.onmessage = ({ data }) => {
+  ensureWorker(engine) {
+    if (this.workers[engine]) return this.workers[engine];
+    const w =
+      engine === 'piper'
+        ? new Worker(new URL('./piperVoice.worker.js', import.meta.url), { type: 'module' })
+        : new Worker(new URL('./nameVoice.worker.js', import.meta.url), { type: 'module' });
+    this.workers[engine] = w;
+    w.onmessage = ({ data }) => {
       if (data.type === 'progress') {
         const f = this.files[data.file] || { loaded: 0, total: 0 };
         if (data.total) f.total = data.total;
@@ -106,20 +133,21 @@ class NameVoice {
       if (data.type === 'error') p.reject(new Error(data.message));
       else p.resolve(data);
     };
-    this.worker.onerror = (e) => {
+    w.onerror = (e) => {
       this.pending.forEach((p) => p.reject(new Error(e.message || 'worker error')));
       this.pending.clear();
     };
-    return this.worker;
+    return w;
   }
 
-  call(msg) {
+  call(eng, msg) {
     const id = ++this.reqId;
-    const w = this.ensureWorker();
+    const w = this.ensureWorker(eng.engine);
     const options = ttsMode() === 'webgpu' ? { device: 'webgpu', dtype: 'fp32' } : { device: 'wasm', dtype: 'q8' };
+    const extra = eng.engine === 'piper' ? { model: eng.model, assets: PIPER_ASSETS } : { options };
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
-      w.postMessage({ ...msg, id, options });
+      w.postMessage({ ...msg, id, ...extra });
     });
   }
 
@@ -145,13 +173,13 @@ class NameVoice {
   }
 
   /**
-   * Make every name speakable in `voice` ('george' | 'heart'). Background work; never throws.
-   * Returns a promise that resolves when done (or failed).
+   * Make every name speakable in `voice` (a narrator voice: 'george' | 'heart' | 'ta_rasa' | 'ta_jaya').
+   * Background work; never throws. Returns a promise that resolves when done (or failed).
    */
   prepare(voice, names) {
-    const kokoroVoice = KOKORO_VOICES[voice];
+    const eng = nameEngine(voice);
     const list = [...new Set(names.map(cleanName).filter(Boolean))];
-    if (!this.enabled() || !kokoroVoice) {
+    if (!this.enabled() || !eng) {
       this.setStatus({ state: 'off' });
       return Promise.resolve();
     }
@@ -175,12 +203,11 @@ class NameVoice {
       try {
         const t0 = performance.now();
         this.setStatus({ state: 'loading' });
-        await this.call({ type: 'load' });
+        await this.call(eng, { type: 'load' });
         if (this.stats.loadMs === null) this.stats.loadMs = Math.round(performance.now() - t0);
         this.setStatus({ state: 'synth' });
         for (const n of missing) {
-          // a trailing full stop gives a natural, complete intonation for a name said on its own
-          const r = await this.call({ type: 'synth', text: `${n}.`, voice: kokoroVoice, speed: SPEED });
+          const r = await this.call(eng, { type: 'synth', text: nameText(voice, n), voice: eng.voice, speed: SPEED });
           this.stats.synthMs.push(r.ms);
           const blob = encodeWav(r.samples, r.sampleRate);
           this.urls.set(this.key(voice, n), URL.createObjectURL(blob));
@@ -210,7 +237,7 @@ export function canSpeakName() {
   }
 }
 
-export function speakName(name, { rate = 1, muted = false } = {}) {
+export function speakName(name, { rate = 1, muted = false, lang = 'en' } = {}) {
   return new Promise((resolve) => {
     if (!canSpeakName() || muted) {
       setTimeout(resolve, 500 / rate);
@@ -218,8 +245,9 @@ export function speakName(name, { rate = 1, muted = false } = {}) {
     }
     const synth = window.speechSynthesis;
     const voices = synth.getVoices();
-    const voice = voices.find((v) => /en[-_]IN/i.test(v.lang)) || voices.find((v) => /en[-_]GB/i.test(v.lang)) || voices.find((v) => /^en/i.test(v.lang));
-    const u = new SpeechSynthesisUtterance(cleanName(name));
+    const ta = lang === 'ta' ? voices.find((v) => /^ta/i.test(v.lang)) : null;
+    const voice = ta || voices.find((v) => /en[-_]IN/i.test(v.lang)) || voices.find((v) => /en[-_]GB/i.test(v.lang)) || voices.find((v) => /^en/i.test(v.lang));
+    const u = new SpeechSynthesisUtterance(ta ? toTamilScript(cleanName(name)) : cleanName(name));
     if (voice) u.voice = voice;
     u.lang = voice?.lang || 'en-GB';
     u.rate = 0.95 * rate;

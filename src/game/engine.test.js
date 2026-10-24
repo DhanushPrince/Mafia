@@ -507,3 +507,31 @@ describe('stale ADVANCE guard', () => {
     expect(reducer(t, { type: 'ADVANCE', from: PHASES.NIGHT_INTRO })).toBe(t);
   });
 });
+
+describe('narrator language saved with the game', () => {
+  const players = [
+    { name: 'A', role: 'mafia' }, { name: 'B', role: 'doctor' }, { name: 'C', role: 'detective' }, { name: 'D', role: 'villager' },
+  ];
+  const begin = (lang) => run(reducer(createInitialState(), { type: 'NEW_GAME', lang }), { type: 'START_NIGHT', players });
+
+  it('defaults to Tamil and keeps the language chosen at NEW_GAME', () => {
+    expect(createInitialState().lang).toBe('ta');
+    expect(begin(undefined).lang).toBe('ta');
+    expect(begin('en').lang).toBe('en');
+    expect(begin('ta').lang).toBe('ta');
+    expect(begin('xx').lang).toBe('ta');
+  });
+
+  it('round-trips the language through save / restore', () => {
+    for (const lang of ['ta', 'en']) {
+      const s = begin(lang);
+      expect(deserialize(serialize(s)).lang).toBe(lang);
+    }
+  });
+
+  it('treats saves from before Tamil narration as English games', () => {
+    const { lang, ...old } = begin('ta');
+    expect(lang).toBe('ta');
+    expect(deserialize(JSON.stringify(old)).lang).toBe('en');
+  });
+});

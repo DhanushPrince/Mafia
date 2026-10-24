@@ -54,12 +54,17 @@ export function nightOrderFor(dealtRoles, defs = ROLE_DEFS) {
 
 const emptyNight = () => ({ selections: {}, result: null });
 
-export function createInitialState(rules = {}, timers = undefined) {
+/** Narrator language saved with the game: 'ta' (Tamil, the default) | 'en'. */
+export const GAME_LANGS = ['ta', 'en'];
+export const normalizeGameLang = (lang, fallback = 'ta') => (GAME_LANGS.includes(lang) ? lang : fallback);
+
+export function createInitialState(rules = {}, timers = undefined, lang = undefined) {
   return {
     version: ENGINE_VERSION,
     phase: PHASES.SETUP,
     rules: { ...DEFAULT_RULES, ...rules },
     timers: normalizeTimers(timers), // { turnSec, discussMin } chosen at setup; saved with the game
+    lang: normalizeGameLang(lang), // narrator language chosen at setup; saved with the game
     players: [], // [{ name, role, alive }]
     nightOrder: [], // role ids with a night turn this game
     round: 0, // night/day counter, 1-based once the first night starts
@@ -303,7 +308,7 @@ export function reducer(state, action) {
       return createInitialState({ ...state.rules, ...(action.rules || {}) });
 
     case 'NEW_GAME': // SETUP -> DEAL
-      return { ...createInitialState({ ...state.rules, ...(action.rules || {}) }, action.timers ?? state.timers), phase: PHASES.DEAL };
+      return { ...createInitialState({ ...state.rules, ...(action.rules || {}) }, action.timers ?? state.timers, action.lang ?? state.lang), phase: PHASES.DEAL };
 
     case 'RESTORE': {
       const restored = deserialize(action.saved);
@@ -386,9 +391,10 @@ export function deserialize(raw) {
     if (!Array.isArray(data.players) || !data.players.every((p) => p && typeof p.name === 'string' && defFor(p.role) && typeof p.alive === 'boolean')) return null;
     if (!Array.isArray(data.nightOrder) || !data.nightOrder.every((r) => defFor(r))) return null;
     if (!data.night || typeof data.night.selections !== 'object' || !Array.isArray(data.log)) return null;
-    const base = createInitialState(data.rules, data.timers);
+    // saves from before Tamil narration were English games
+    const base = createInitialState(data.rules, data.timers, normalizeGameLang(data.lang, 'en'));
     // saves from before configurable timers have no `timers`: they get the defaults
-    return { ...base, ...data, rules: { ...base.rules, ...(data.rules || {}) }, timers: base.timers };
+    return { ...base, ...data, rules: { ...base.rules, ...(data.rules || {}) }, timers: base.timers, lang: base.lang };
   } catch {
     return null;
   }
