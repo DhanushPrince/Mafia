@@ -4,9 +4,13 @@
  */
 const raw = (import.meta.env?.VITE_ROOMS_HOST || '').trim();
 
-/** "https://x.dev/" | "x.dev" -> "x.dev"; "" when unset. */
+/** "https://x.dev/" | "x.dev" -> "x.dev"; "" when unset. String scanning only (no backtracking regex). */
 export function normalizeHost(value) {
-  return String(value || '').trim().replace(/^[a-z]+:\/\//i, '').replace(/\/.*$/, '');
+  let h = String(value || '').trim();
+  const sep = h.indexOf('://');
+  if (sep > 0 && /^[a-z]+$/i.test(h.slice(0, sep))) h = h.slice(sep + 3); // drop "scheme://"
+  const slash = h.indexOf('/');
+  return slash === -1 ? h : h.slice(0, slash); // drop the path
 }
 
 /** The deployed room server, used by the static Pages site when VITE_ROOMS_HOST is not set. */

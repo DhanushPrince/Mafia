@@ -25,3 +25,45 @@ describe('resolveRoomsHost', () => {
     expect(resolveRoomsHost('localhost:8787', 'localhost:5173')).toBe('localhost:8787');
   });
 });
+
+describe('normalizeHost edge cases (results identical to the previous regex version)', () => {
+  it('handles schemes, paths, ports and odd input', () => {
+    const cases = {
+      'http://localhost:8787': 'localhost:8787',
+      'HTTPS://Rooms.Example.com/api/x?y=1': 'Rooms.Example.com',
+      'wss://mafia-dealer.dhanushprince.workers.dev': 'mafia-dealer.dhanushprince.workers.dev',
+      'mafia-dealer.dhanushprince.workers.dev/parties/room/ABCD': 'mafia-dealer.dhanushprince.workers.dev',
+      '  rooms.example.com  ': 'rooms.example.com',
+      'h2c+x://host/path': 'h2c+x:',
+      '://host': ':',
+      'a/b://c': 'a',
+      'ab://x://y': 'x:',
+      '/just/a/path': '',
+    };
+    for (const [input, out] of Object.entries(cases)) {
+      expect(normalizeHost(input)).toBe(out);
+    }
+    expect(normalizeHost(undefined)).toBe('');
+    expect(normalizeHost(null)).toBe('');
+  });
+
+  it('is fast on long adversarial input (no backtracking)', () => {
+    const evil = `${'a'.repeat(50_000)}:${'/'.repeat(50_000)}`;
+    const t0 = performance.now();
+    normalizeHost(evil);
+    expect(performance.now() - t0).toBeLessThan(100);
+  });
+});
+
+describe('resolveRoomsHost hosts', () => {
+  it('workers.dev and localhost pages talk to their own origin', () => {
+    expect(resolveRoomsHost('', 'mafia-dealer.dhanushprince.workers.dev')).toBe('');
+    expect(resolveRoomsHost('', 'other.workers.dev')).toBe('');
+    expect(resolveRoomsHost('', 'localhost')).toBe('');
+    expect(resolveRoomsHost('', 'mafia-dealer.pages.dev:443')).toBe(DEFAULT_WORKER_HOST);
+  });
+  it('VITE_ROOMS_HOST override is normalised and beats previews', () => {
+    expect(resolveRoomsHost('https://rooms.example.com/x', 'feature.mafia-dealer.pages.dev')).toBe('rooms.example.com');
+    expect(resolveRoomsHost('   ', 'mafia-dealer.pages.dev')).toBe(DEFAULT_WORKER_HOST);
+  });
+});

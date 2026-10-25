@@ -48,7 +48,7 @@ const ERRORS = {
 };
 
 // ------------------------------------------------------------------ name entry
-function NameForm({ initial = '', onSave, error, suggestions = [], submitLabel = 'Continue as guest', autoFocus = true }) {
+function NameForm({ initial = '', onSave, error, suggestions = [], submitLabel = 'Continue as guest' }) {
   const [name, setName] = useState(initial);
   const [touched, setTouched] = useState(false);
   const check = validateName(name);
@@ -64,7 +64,6 @@ function NameForm({ initial = '', onSave, error, suggestions = [], submitLabel =
         <input
           data-testid="name-input"
           value={name}
-          autoFocus={autoFocus}
           maxLength={NAME_MAX * 3}
           onChange={(e) => { setName(e.target.value); setTouched(false); }}
           placeholder="Your name / உங்கள் பெயர்"
@@ -525,7 +524,8 @@ function useVideo(view, send) {
     let cancelled = false;
     let mesh = null;
     let watchdog = null;
-    (async () => {
+    const start = async () => {
+      // no config (offline / static preview): fall back to the Mesh's public STUN default
       const cfg = await fetch(apiUrl('/api/config')).then((r) => r.json()).catch(() => ({}));
       const { stream, error } = await getLocalMedia();
       if (cancelled) { stream?.getTracks().forEach((t) => t.stop()); return; }
@@ -539,7 +539,12 @@ function useVideo(view, send) {
       watchdog = setInterval(() => mesh.check(), 3000);
       if (debugHooks()) window.__mesh = mesh;
       setRemotes({});
-    })();
+    };
+    start().catch((e) => {
+      // e.g. no WebRTC in this browser: the game still works, the tiles show names only
+      console.warn('[video] could not start', e);
+      if (!cancelled) setMediaError('unavailable');
+    });
     stopRef.current = () => { cancelled = true; clearInterval(watchdog); mesh?.close(); meshRef.current = null; };
     return () => { stopRef.current(); setLocal(null); };
   }, [joined, you, send]);
@@ -571,7 +576,10 @@ function useNarration(view, send, names) {
   // prepare spoken names once a game starts (skipped in fast/test rooms: it downloads a voice model)
   const gameKey = view?.status === 'game' ? view.game?.players.map((p) => p.seat).join() : '';
   useEffect(() => {
-    if (isHost && gameKey && !view.settings.fast) nameVoice.prepare(voice, Object.values(names));
+    if (isHost && gameKey && !view.settings.fast) {
+      // background download; on failure names fall back to speechSynthesis / "look at the screen"
+      nameVoice.prepare(voice, Object.values(names)).catch((e) => console.warn('[names] voice prepare failed', e));
+    }
   }, [isHost, gameKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const cue = view?.flow?.cue;
@@ -581,7 +589,9 @@ function useNarration(view, send, names) {
     const items = cue.clips.map((c) => (typeof c === 'object' && c ? { name: names[c.name] || c.name } : c));
     if (isHost) {
       narrator.stop(); // the server moved on: drop whatever is left of the previous cue
-      narrator.say(items).then(() => send({ t: 'cueDone', id: cue.id }));
+      const ack = () => send({ t: 'cueDone', id: cue.id });
+      // a clip that cannot play (autoplay block, network) must not hold the table: ack and move on
+      narrator.say(items).then(ack, (e) => { console.warn('[narrator] cue failed', e); ack(); });
     } else {
       const lines = linesFor(voice);
       setCaption(items.map((c) => (typeof c === 'object' ? c.name : lines[c] || '')).join(' ').trim());
