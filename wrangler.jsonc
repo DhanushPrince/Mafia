@@ -11,7 +11,7 @@
   },
   "durable_objects": { "bindings": [{ "name": "Room", "class_name": "Room" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
-  // Only needed for Google sign-in. Replace database_id after `npx wrangler d1 create mafia-auth`.
-  "d1_databases": [{ "binding": "DB", "database_name": "mafia-auth", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": "migrations" }],
+  // Google sign-in only: run `npx wrangler d1 create mafia-auth`, then uncomment with the real database_id.
+  // "d1_databases": [{ "binding": "DB", "database_name": "mafia-auth", "database_id": "<id>", "migrations_dir": "migrations" }],
   "observability": { "enabled": true }
 }

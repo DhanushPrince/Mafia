@@ -78,7 +78,7 @@ Branch `online-rooms` (from `tamil-narrator`). Local commits only. No push, no d
    - Authorized JavaScript origins: `https://<your-worker-host>` and `http://localhost:5173`
    - Authorized redirect URIs: `https://<your-worker-host>/api/auth/callback/google` and
      `http://localhost:5173/api/auth/callback/google`
-3. `npx wrangler d1 create mafia-auth` -> put the `database_id` in `wrangler.jsonc`.
+3. `npx wrangler d1 create mafia-auth` -> uncomment `d1_databases` in `wrangler.jsonc` with that `database_id`.
 4. `npm run db:migrate` (remote) / `npm run db:migrate:local`.
 5. Secrets: `npx wrangler secret put GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `BETTER_AUTH_SECRET`
    (random 32+ chars); optional var `BETTER_AUTH_URL=https://<your-worker-host>`. Locally put them in `.dev.vars`.
@@ -87,8 +87,7 @@ Branch `online-rooms` (from `tamil-narrator`). Local commits only. No push, no d
 
 ## Deploy (needs your OK + your Cloudflare account)
 1. `npx wrangler login`
-2. (Google only) steps 3-5 above. Without Google, remove nothing: the DB binding is unused.
-   Note: `wrangler deploy` needs a real D1 id or the `d1_databases` block removed.
+2. (Google only) steps 3-5 above. Without Google nothing else is needed (the D1 block is commented out).
 3. `npm run deploy` (= `vite build && wrangler deploy`) -> `https://mafia-dealer.<account>.workers.dev`.
 4. Free plan: Durable Objects with SQLite storage are on the Workers Free plan.
 - Cloudflare Pages (current site) keeps building `npm run build`, which stays a static build (`NO_WORKER=1`).
