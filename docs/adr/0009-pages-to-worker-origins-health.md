@@ -10,7 +10,8 @@ deployed separately on workers.dev. Browsers on the Pages domain must reach it, 
 
 ## Decision
 
-- The client reads `VITE_ROOMS_HOST` at build time (`src/online/roomsHost.js`). Empty means same origin.
+- The client reads `VITE_ROOMS_HOST` at build time (`src/online/roomsHost.js`). When it is unset, pages served from
+  `mafia-dealer.pages.dev` or `*.mafia-dealer.pages.dev` use the deployed Worker host; anywhere else is same origin.
 - The Worker allows browser origins (`worker/origins.js`): itself, `https://mafia-dealer.pages.dev`, one-level
   previews `https://<branch>.mafia-dealer.pages.dev`, localhost, plus `ALLOWED_ORIGINS`. Others get 403
   on `/parties/*`. `/api/config` and `/api/health` send CORS headers to allowed origins only. Requests with
@@ -22,7 +23,8 @@ deployed separately on workers.dev. Browsers on the Pages domain must reach it, 
 ## Consequences
 
 - One Worker serves both its own site and the Pages site.
-- The Pages project needs `VITE_ROOMS_HOST` set in its build settings and a rebuild.
+- The Pages site works with no Pages settings; the Worker host is hard-coded as the Pages default, so moving the
+  Worker means changing `DEFAULT_WORKER_HOST` or setting `VITE_ROOMS_HOST`.
 - Origin checks stop other websites from opening rooms through users' browsers; they do not stop
   non-browser clients.
 

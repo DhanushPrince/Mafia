@@ -1,7 +1,6 @@
 /**
  * Where the room server (Worker) lives. Empty = same origin (Worker deploy, `vite` dev).
- * The static Cloudflare Pages build sets VITE_ROOMS_HOST=mafia-dealer.<account>.workers.dev
- * so its /online page talks to the deployed Worker.
+ * On mafia-dealer.pages.dev (and its previews) it defaults to the deployed Worker; VITE_ROOMS_HOST overrides.
  */
 const raw = (import.meta.env?.VITE_ROOMS_HOST || '').trim();
 
@@ -10,7 +9,22 @@ export function normalizeHost(value) {
   return String(value || '').trim().replace(/^[a-z]+:\/\//i, '').replace(/\/.*$/, '');
 }
 
-export const ROOMS_HOST = normalizeHost(raw);
+/** The deployed room server, used by the static Pages site when VITE_ROOMS_HOST is not set. */
+export const DEFAULT_WORKER_HOST = 'mafia-dealer.dhanushprince.workers.dev';
+const PAGES_HOST = /^([a-z0-9-]+\.)?mafia-dealer\.pages\.dev$/i;
+
+/**
+ * Room server host for a page served from `pageHost`: VITE_ROOMS_HOST if set, else the Worker for the
+ * Pages site (production and branch previews), else "" (same origin: the Worker itself, localhost dev).
+ */
+export function resolveRoomsHost(configured, pageHost) {
+  const c = normalizeHost(configured);
+  if (c) return c;
+  const h = String(pageHost || '').toLowerCase().replace(/:\d+$/, '');
+  return PAGES_HOST.test(h) ? DEFAULT_WORKER_HOST : '';
+}
+
+export const ROOMS_HOST = resolveRoomsHost(raw, typeof window !== 'undefined' ? window.location.host : '');
 
 /** Host for PartySocket (it picks ws:// for localhost, wss:// otherwise). */
 export const socketHost = () => ROOMS_HOST || window.location.host;

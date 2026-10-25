@@ -91,7 +91,7 @@ D1 (Google sign-in only): better-auth tables in `migrations/0001_better_auth.sql
 
 | Name | Where | Purpose |
 |------|-------|---------|
-| `VITE_ROOMS_HOST` | Pages build | Worker host for a static build, e.g. `mafia-dealer.<subdomain>.workers.dev`. Empty = same origin. |
+| `VITE_ROOMS_HOST` | Pages build | Room server host override. Unset: pages on `mafia-dealer.pages.dev` / `*.mafia-dealer.pages.dev` use the deployed Worker (`DEFAULT_WORKER_HOST` in `src/online/roomsHost.js`); everywhere else same origin. |
 | `ALLOWED_ORIGINS` | Worker var | Extra browser origins, comma separated. Pages and its previews are built in. |
 | `TURN_URLS`, `TURN_USERNAME`, `TURN_CREDENTIAL` | Worker var/secret | TURN relay for strict NATs. Without it: public STUN only. |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Worker secret | Google sign-in (off when missing). |
@@ -108,8 +108,8 @@ npm run deploy                # vite build && wrangler deploy -> https://mafia-d
 ```
 
 - The Cloudflare account needs a workers.dev subdomain (created on first visit to Workers & Pages, or by API).
-- Pages keeps building `npm run build` (static, `NO_WORKER=1`). Set `VITE_ROOMS_HOST` in the Pages project
-  (Production and Preview) and rebuild so its `/online` uses the Worker.
+- Pages keeps building `npm run build` (static, `NO_WORKER=1`). Its `/online` connects to the deployed
+  Worker automatically (no Pages settings needed); set `VITE_ROOMS_HOST` only to point it elsewhere.
 - Google sign-in: create an OAuth web client (redirect `https://<host>/api/auth/callback/google`),
   `npx wrangler d1 create mafia-auth`, uncomment `d1_databases` in `wrangler.jsonc` with the id,
   `npm run db:migrate`, then `wrangler secret put` the `GOOGLE_*` and `BETTER_AUTH_SECRET` values.

@@ -25,8 +25,8 @@ Branch `online-rooms` (from `tamil-narrator`). Local commits only. No push, no d
 - Redeploy: `CLOUDFLARE_API_TOKEN=... CLOUDFLARE_ACCOUNT_ID=... npm run deploy` (or `npx wrangler login` first).
 
 ## Pages site -> Worker rooms
-- The Pages build is static. Set `VITE_ROOMS_HOST=mafia-dealer.dhanushprince.workers.dev` in Cloudflare Pages ->
-  mafia-dealer -> Settings -> Variables (Production and Preview) and redeploy; `/online` then talks to the Worker.
+- The Pages build is static. On `mafia-dealer.pages.dev` and its previews `/online` defaults to the Worker
+  `mafia-dealer.dhanushprince.workers.dev` (no Pages settings needed). `VITE_ROOMS_HOST` overrides it at build time.
 - The Worker accepts browser origins: itself, `https://mafia-dealer.pages.dev`, `https://<branch|hash>.mafia-dealer.pages.dev`,
   localhost, plus env `ALLOWED_ORIGINS` (comma separated). Other origins get 403 on `/parties/*`; CORS on `/api/config|health`.
 - If the room server can't be reached in 8 s, `/online` shows "Can't reach the room server" with Try again.
