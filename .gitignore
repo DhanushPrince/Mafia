@@ -28,3 +28,7 @@ dist-ssr
 # Cloudflare local state
 .wrangler
 .dev.vars
+
+# Test coverage (CI uploads lcov to SonarQube Cloud)
+coverage
+.scannerwork
