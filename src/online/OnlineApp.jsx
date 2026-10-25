@@ -16,6 +16,7 @@ import { validateName, randomFunName, NAME_MAX } from './names';
 import { isRoomCode, randomRoomCode, VOTE_OPTIONS_SEC } from './roomLogic';
 import { loadIdentity, saveIdentity } from './identity';
 import useRoom from './useRoom';
+import { apiUrl, ROOMS_HOST } from './roomsHost';
 import { Mesh, getLocalMedia } from './video';
 import VideoGrid from './VideoGrid';
 
@@ -522,7 +523,7 @@ function useVideo(view, send) {
     let mesh = null;
     let watchdog = null;
     (async () => {
-      const cfg = await fetch('/api/config').then((r) => r.json()).catch(() => ({}));
+      const cfg = await fetch(apiUrl('/api/config')).then((r) => r.json()).catch(() => ({}));
       const { stream, error } = await getLocalMedia();
       if (cancelled) { stream?.getTracks().forEach((t) => t.stop()); return; }
       setMediaError(error);
@@ -588,7 +589,7 @@ function Room({ code, identity, opts, onLeave, onIdentity }) {
   const [name, setName] = useState(identity.name);
   const videoRef = useRef(null);
   const room = useRoom({ code, gid: identity.gid, name, create: opts.create, fast: opts.fast, onRtc: (f, d) => videoRef.current?.(f, d) });
-  const { view, error, clearError, fatal, online, send, serverNow } = room;
+  const { view, error, clearError, fatal, online, unreachable, retry, send, serverNow } = room;
   const v = useVideo(view, send);
   videoRef.current = v.onRtc;
   const names = useMemo(() => Object.fromEntries((view?.members || []).map((m) => [m.seat, m.name])), [view?.members]);
@@ -618,6 +619,21 @@ function Room({ code, identity, opts, onLeave, onIdentity }) {
             suggestions={joinError.suggestions || []}
             onSave={(n) => { setName(n); clearError(); send({ t: 'join', name: n }); }}
           />
+          <button type="button" onClick={() => onLeave(null)} className="text-sm text-white/50 underline">Back</button>
+        </div>
+      </div>
+    );
+  }
+  if (!view?.joined && unreachable && !online) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className={`${panel} w-full max-w-md flex flex-col gap-4 text-center`} data-testid="server-unreachable" role="alert">
+          <h2 className="text-xl font-bold">Can&apos;t reach the room server</h2>
+          <p className="text-sm text-white/70">
+            Online rooms need the Mafia Dealer room server, and it isn&apos;t answering.
+            {ROOMS_HOST ? ` (${ROOMS_HOST})` : ' This site may be a static preview without one.'} Check your connection and try again.
+          </p>
+          <PrimaryButton onClick={retry} data-testid="server-retry">Try again</PrimaryButton>
           <button type="button" onClick={() => onLeave(null)} className="text-sm text-white/50 underline">Back</button>
         </div>
       </div>
@@ -669,7 +685,7 @@ export default function OnlineApp({ onExit }) {
   const [notice, setNotice] = useState(null);
   const [named, setNamed] = useState(() => validateName(loadIdentity().name).ok);
 
-  useEffect(() => { fetch('/api/config').then((r) => r.json()).then((c) => setGoogle(Boolean(c.google))).catch(() => {}); }, []);
+  useEffect(() => { fetch(apiUrl('/api/config')).then((r) => r.json()).then((c) => setGoogle(Boolean(c.google))).catch(() => {}); }, []);
   useEffect(() => {
     const onPop = () => { setRoomCode(codeFromPath()); setOpts({}); };
     window.addEventListener('popstate', onPop);

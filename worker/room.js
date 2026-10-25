@@ -20,6 +20,9 @@ const validGid = (gid) => typeof gid === 'string' && /^[A-Za-z0-9_-]{16,64}$/.te
 export class Room extends Server {
   static options = { hibernate: true };
 
+  /** Health check RPC: proves Durable Objects answer. Touches no room state. */
+  async ping() { return Date.now(); }
+
   async onStart() {
     this.room = (await this.ctx.storage.get('room')) || null;
   }
