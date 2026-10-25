@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { BookOpen, Users, ChevronUp, ChevronDown, Crown, Smartphone, Play, RotateCcw, Timer, Moon, Sun } from 'lucide-react';
-import { narrator, VOICES } from '../audio/narrator';
+import { BookOpen, Users, ChevronUp, ChevronDown, Crown, Smartphone, Play, RotateCcw, Timer, Moon, Sun, Languages } from 'lucide-react';
+import { narrator, LANGS, normalizeLang, narratorVoice, voicesFor } from '../audio/narrator';
 
 import { MIN_PLAYERS, MAX_PLAYERS } from '../game/roles';
 import { TURN_OPTIONS_SEC, DISCUSS_OPTIONS_MIN, normalizeTimers, resultMsFor, formatTurn, formatDiscuss } from '../game/timing';
@@ -232,10 +232,11 @@ function ModeSettings({ settings, onSettings }) {
     `flex-1 flex flex-col items-center gap-1 rounded-lg px-2 py-3 text-xs font-bold uppercase tracking-wider transition-colors border ${
       active ? 'bg-violet-600/40 border-violet-400/60 text-white' : 'bg-white/5 border-white/10 text-violet-200/70'
     }`;
-  const preview = (voice) => {
+  const lang = normalizeLang(settings.lang);
+  const preview = (gender) => {
     narrator.unlock();
     narrator.stop();
-    narrator.setVoice(voice);
+    narrator.setVoice(narratorVoice(lang, gender));
     narrator.say('night_start');
   };
   return (
@@ -252,19 +253,43 @@ function ModeSettings({ settings, onSettings }) {
       {narratorMode && (
         <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/5 p-3">
           <div className="text-xs text-violet-200/60 text-center">Everyone gets a card. The app narrates the nights.</div>
+          <div data-testid="narrator-language" className="flex items-center gap-2">
+            <Languages size={16} className="shrink-0 text-violet-200/70" aria-hidden="true" />
+            <div role="radiogroup" aria-label="Narrator language" className="flex flex-1 gap-2">
+              {Object.values(LANGS).map((l) => (
+                <button
+                  key={l.id}
+                  type="button"
+                  role="radio"
+                  lang={l.id}
+                  aria-checked={lang === l.id}
+                  onClick={() => {
+                    narrator.stop();
+                    onSettings({ lang: l.id });
+                  }}
+                  className={`flex-1 rounded-lg border py-2 text-sm font-bold transition-colors ${
+                    lang === l.id ? 'border-violet-400/60 bg-violet-600/30 text-white' : 'border-white/10 bg-black/20 text-violet-200/70'
+                  }`}
+                >
+                  {l.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <div role="radiogroup" aria-label="Narrator voice" className="flex gap-2">
-            {Object.values(VOICES).map((v) => (
-              <div key={v.id} className={`flex-1 flex items-center rounded-lg border ${settings.voice === v.id ? 'border-violet-400/60 bg-violet-600/30' : 'border-white/10 bg-black/20'}`}>
+            {voicesFor(lang).map((v) => (
+              <div key={v.id} className={`flex-1 flex items-center rounded-lg border ${settings.voice === v.gender ? 'border-violet-400/60 bg-violet-600/30' : 'border-white/10 bg-black/20'}`}>
                 <button
                   type="button"
                   role="radio"
-                  aria-checked={settings.voice === v.id}
-                  onClick={() => onSettings({ voice: v.id })}
+                  data-voice={v.id}
+                  aria-checked={settings.voice === v.gender}
+                  onClick={() => onSettings({ voice: v.gender })}
                   className="flex-1 py-2 pl-3 text-left text-sm text-white"
                 >
-                  <span className="font-bold">{v.label}</span> <span className="text-white/50 text-xs">{v.description}</span>
+                  <span className="block font-bold">{v.label}</span> <span className="block whitespace-nowrap text-white/50 text-xs">{v.description}</span>
                 </button>
-                <button type="button" aria-label={`Preview ${v.label} voice`} onClick={() => preview(v.id)} className="p-2 text-violet-200/70 hover:text-white">
+                <button type="button" aria-label={`Preview ${v.label} voice`} onClick={() => preview(v.gender)} className="p-2 text-violet-200/70 hover:text-white">
                   <Play size={14} />
                 </button>
               </div>

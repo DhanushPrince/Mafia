@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 // Shared e2e helpers: browser targets, audio instrumentation, setup + deal flow.
 import { chromium, webkit, devices } from 'playwright-core';
 
@@ -91,8 +92,17 @@ export function audioInitScript() {
   });
 }
 
+/** Serve the Piper Tamil Rasa ONNX models from the local copy instead of huggingface.co (saves 63 MB per context). */
+export async function routeLocalPiper(ctx, dir = process.env.PIPER_DIR || '/workspace/tamil-tts/hf') {
+  await ctx.route(/huggingface\.co\/tinisoft\/piper-ta_IN-rasa_(male|female)-medium\/resolve\/main\/[^/]+\.onnx$/, (route, req) => {
+    const v = req.url().match(/rasa_(male|female)/)[0];
+    route.fulfill({ status: 200, contentType: 'application/octet-stream', headers: { 'access-control-allow-origin': '*' }, body: fs.readFileSync(`${dir}/tinisoft_piper-ta_IN-${v}-medium/ta_IN-${v}-medium.onnx`) });
+  });
+}
+
 export async function newPage(browser, ctxOpts) {
   const ctx = await browser.newContext(ctxOpts);
+  if (process.env.MODEL !== 'remote') await routeLocalPiper(ctx);
   const page = await ctx.newPage();
   await page.addInitScript(audioInitScript);
   const errors = [];
@@ -160,15 +170,18 @@ export const tapper = (page, webkitMode) => async (loc, opts = {}) => {
 
 /**
  * Setup screen -> names screen with `names` filled in.
- * opts: { voice: 'george'|'heart', turn: '30s', discuss: '1m', query }
+ * opts: { voice: 'george'|'heart' (English) | 'ta_rasa'|'ta_jaya' (Tamil), turn: '30s', discuss: '1m', query }
  */
+export const voiceLang = (voice) => (String(voice).startsWith('ta_') ? 'ta' : 'en');
 export async function setup(page, tap, base, n, names, { voice = 'george', turn, discuss, webkitMode = false } = {}) {
   await page.goto(base);
   await page.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
   await page.reload();
   await page.waitForTimeout(500);
   await tap(page.getByRole('radio', { name: /App is Game Master/ }));
-  await tap(page.getByRole('radio', { name: voice === 'heart' ? /^Heart/ : /^George/ }));
+  // narrator language first (the voice list depends on it); Tamil is the default
+  await tap(page.getByTestId('narrator-language').getByRole('radio', { name: voiceLang(voice) === 'ta' ? 'தமிழ்' : 'English' }));
+  await tap(page.locator(`[role="radio"][data-voice="${voice}"]`));
   if (turn) await tap(page.getByTestId('turn-length').getByRole('radio', { name: turn, exact: true }));
   if (discuss) await tap(page.getByTestId('discuss-length').getByRole('radio', { name: discuss, exact: true }));
   const count = async () => Number((await page.getByTestId('player-count').textContent()).trim());

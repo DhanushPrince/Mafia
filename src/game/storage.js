@@ -51,7 +51,8 @@ const SETTINGS_KEY = 'mafia-dealer:settings';
 
 export const DEFAULT_SETTINGS = Object.freeze({
   mode: 'human', // 'human' = Human Game Master, 'narrator' = App is Game Master
-  voice: 'george', // 'george' | 'heart'
+  lang: 'ta', // narrator language: 'ta' (Tamil, default) | 'en'
+  voice: 'george', // narrator gender: 'george' = male | 'heart' = female (clip folder depends on lang)
   muted: false,
   ambient: true,
   noRepeatSave: true,
@@ -65,6 +66,7 @@ export function loadSettings() {
     const data = raw ? JSON.parse(raw) : {};
     return {
       mode: data.mode === 'narrator' ? 'narrator' : 'human',
+      lang: data.lang === 'en' ? 'en' : 'ta',
       voice: data.voice === 'heart' ? 'heart' : 'george',
       muted: data.muted === true,
       ambient: data.ambient !== false,

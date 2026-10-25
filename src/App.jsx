@@ -13,7 +13,7 @@ import {
   loadSavedGameRaw, saveGameRaw, clearSavedGame, volumeHintSeen, markVolumeHintSeen,
 } from './game/storage';
 import { reducer as engineReducer, createInitialState, serialize, deserialize, isResumable, isTurnPhase, PHASES, allClipIds } from './game/engine';
-import { narrator } from './audio/narrator';
+import { narrator, narratorVoice } from './audio/narrator';
 import { nameVoice } from './audio/nameVoice';
 import { unlockAmbient } from './audio/ambient';
 import { TIMING } from './game/timing';
@@ -55,12 +55,15 @@ function App() {
     });
   };
 
-  // narrator follows settings
+  // narrator follows settings; a running game keeps the language it was started (and saved) with
+  const inGame = screen === 'narrator' || (screen === 'dealing' && settings.mode === 'narrator');
+  const lang = inGame ? game.lang : settings.lang;
+  const voice = narratorVoice(lang, settings.voice);
   useEffect(() => {
-    narrator.setVoice(settings.voice);
+    narrator.setVoice(voice);
     narrator.setMuted(settings.muted);
     narrator.setRate(TIMING.rate);
-  }, [settings.voice, settings.muted]);
+  }, [voice, settings.muted]);
 
   // unlock audio on the very first tap anywhere (mobile autoplay policies)
   useEffect(() => {
@@ -100,9 +103,10 @@ function App() {
         type: 'NEW_GAME',
         rules: { noRepeatSave: settings.noRepeatSave },
         timers: { turnSec: settings.turnSec, discussMin: settings.discussMin },
+        lang: settings.lang,
       });
       // names are known now: load the in-browser voice and synthesise them while the cards are dealt
-      nameVoice.prepare(settings.voice, finalNames);
+      nameVoice.prepare(narratorVoice(settings.lang, settings.voice), finalNames);
     }
     setScreen('dealing');
   };
@@ -135,16 +139,16 @@ function App() {
     })
     .filter(Boolean);
 
-  const prepareAudio = () => {
+  const prepareAudio = (gameLang) => {
     // runs inside the user's tap: unlock the shared audio element + Web Audio, then warm the cache
     narrator.unlock();
     unlockAmbient();
-    narrator.setVoice(settings.voice);
+    narrator.setVoice(narratorVoice(gameLang, settings.voice));
     narrator.preload(allClipIds());
   };
 
   const startNight = () => {
-    prepareAudio();
+    prepareAudio(game.lang);
     if (showVolumeHint) {
       markVolumeHintSeen();
       setShowVolumeHint(false);
@@ -159,8 +163,8 @@ function App() {
       restartGame();
       return;
     }
-    prepareAudio();
-    nameVoice.prepare(settings.voice, saved.players.map((p) => p.name));
+    prepareAudio(saved.lang);
+    nameVoice.prepare(narratorVoice(saved.lang, settings.voice), saved.players.map((p) => p.name));
     dispatch({ type: 'RESTORE', saved });
     setBoundaryKey((k) => k + 1);
     setScreen('narrator');
