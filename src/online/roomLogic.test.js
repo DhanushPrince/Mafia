@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   createRoom, join, rename, disconnect, setReady, updateSettings, kick, start, pickCard, markSeen, forceNight,
   tick, cueDone, nightSelect, castVote, tallyVotes, viewFor, nextAlarm, rematch, backToLobby, pickedCardOf,
-  randomRoomCode, isRoomCode, onlineTiming, HOST_GRACE_MS, LOBBY_GRACE_MS,
+  randomRoomCode, isRoomCode, onlineTiming, HOST_GRACE_MS, LOBBY_GRACE_MS, IDLE_EXPIRE_MS, isExpired, alarmTime, MIN_ALARM_DELAY_MS,
 } from './roomLogic';
 import { PHASES } from '../game/engine';
 
@@ -285,5 +285,100 @@ describe('timeline', () => {
 
   it('real timers follow the room settings', () => {
     expect(onlineTiming({ turnSec: 30, discussMin: 2, voteSec: 45 })).toMatchObject({ turnMs: 30000, discussMs: 120000, voteMs: 45000 });
+  });
+});
+
+describe('alarm scheduling (Durable Object rows_written budget)', () => {
+  // After the alarm runs tick(), nextAlarm must point strictly into the future (or be null),
+  // otherwise the Durable Object re-arms the alarm immediately and loops, writing rows each time.
+  const settled = (room, at) => {
+    const r = tick(room, at);
+    const next = nextAlarm(r, at);
+    return { r, next };
+  };
+  const expectFuture = (next, at) => { if (next !== null) expect(next).toBeGreaterThan(at); };
+
+  it('host offline past grace during a game with nobody else online does not re-arm in the past', () => {
+    let room = inGame(5);
+    const t0 = now();
+    room.members.forEach((m) => { room = disconnect(room, m.seat, t0); });
+    const at = t0 + HOST_GRACE_MS + 5;
+    const { r, next } = settled(room, at);
+    expect(r.hostSeat).toBe('s0'); // nobody to hand the host to
+    expectFuture(next, at);
+    // only idle expiry (or a still-running step deadline) remains
+    expect(next).toBeLessThanOrEqual(r.lastActivity + IDLE_EXPIRE_MS);
+  });
+
+  it('host offline past grace in the deal with nobody else online does not re-arm in the past', () => {
+    let room = dealt(5);
+    const t0 = now();
+    room.members.forEach((m) => { room = disconnect(room, m.seat, t0); });
+    const at = t0 + HOST_GRACE_MS + 5;
+    const { next } = settled(room, at);
+    expect(next).toBe(room.lastActivity + IDLE_EXPIRE_MS);
+  });
+
+  it('lobby: everyone offline, between host grace and lobby grace, does not re-arm in the past', () => {
+    let room = lobby(3);
+    const t0 = now();
+    room.members.forEach((m) => { room = disconnect(room, m.seat, t0); });
+    const at = t0 + HOST_GRACE_MS + 5;
+    const { next } = settled(room, at);
+    expect(next).toBe(t0 + LOBBY_GRACE_MS); // member drop is the next real event
+  });
+
+  it('idle time passed while someone is still connected does not re-arm in the past', () => {
+    let room = lobby(3);
+    const at = room.lastActivity + IDLE_EXPIRE_MS + 5;
+    const { next } = settled(room, at);
+    expect(next).toBeNull(); // nothing scheduled; disconnect re-arms expiry
+    // once everybody is gone the room is due for deletion
+    let gone = room;
+    gone.members.forEach((m) => { gone = disconnect(gone, m.seat, at); });
+    expect(isExpired(gone, at)).toBe(true);
+    expect(nextAlarm(gone, at)).toBe(at);
+  });
+
+  it('a condition that becomes actionable (someone reconnects while host is gone) is due now', () => {
+    let room = inGame(5);
+    const t0 = now();
+    room.members.forEach((m) => { room = disconnect(room, m.seat, t0); });
+    const at = t0 + HOST_GRACE_MS + 5;
+    room = tick(room, at);
+    room = join(room, 's2', 'Karthik', at).room;
+    expect(nextAlarm(room, at)).toBe(at);
+    expect(tick(room, at).hostSeat).toBe('s2');
+  });
+
+  it('a full game: after every tick the next alarm is in the future', () => {
+    let room = inGame(5);
+    const mafia = seatsWith(room, 'mafia');
+    for (let guard = 0; guard < 400 && room.game.phase !== PHASES.END; guard++) {
+      const g = room.game;
+      if (g.phase === PHASES.MAFIA_TURN && room.flow.step === 'open' && !g.night.selections.mafia) {
+        const victim = g.players.find((p) => p.alive && p.role !== 'mafia');
+        room = nightSelect(room, mafia[0], victim.name, now()).room;
+      }
+      T = Math.max(T + 10, room.flow?.deadline ?? T + 10);
+      room = tick(room, T);
+      expectFuture(nextAlarm(room, T), T);
+    }
+    expect(room.game.phase).toBe(PHASES.END);
+    room = tick(room, T + 60_000);
+    expect(room.flow.step).toBe('over');
+    expectFuture(nextAlarm(room, T + 60_000), T + 60_000);
+  });
+});
+
+describe('alarmTime safety net', () => {
+  it('keeps future deadlines exact and pushes due or past targets out by MIN_ALARM_DELAY_MS', () => {
+    expect(alarmTime(5000, 1000)).toBe(5000);
+    expect(alarmTime(1001, 1000)).toBe(1001);
+    expect(alarmTime(1000, 1000)).toBe(1000 + MIN_ALARM_DELAY_MS);
+    expect(alarmTime(10, 1000)).toBe(1000 + MIN_ALARM_DELAY_MS);
+    expect(alarmTime(null, 1000)).toBeNull();
+    expect(alarmTime(Infinity, 1000)).toBeNull();
+    expect(MIN_ALARM_DELAY_MS).toBeGreaterThanOrEqual(1000);
   });
 });

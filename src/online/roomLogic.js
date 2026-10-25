@@ -6,7 +6,7 @@
  * so names never collide and are never used as identity; display names live in `room.members`.
  *
  * Time is server-owned: `room.flow` is the current step of the narration timeline
- * ({ step, deadline, cue }). The Durable Object sets an alarm at `nextAlarm(room)` and calls
+ * ({ step, deadline, cue }). The Durable Object sets an alarm at `nextAlarm(room, now)` and calls
  * `tick(room, now)`; the host phone acks narration with `cueDone` so a step can end early.
  *
  * Every function returns a new room (or the same object when nothing changed) plus nothing else;
@@ -326,8 +326,19 @@ function housekeeping(room, now) {
 
 export const isExpired = (room, now) => now - room.lastActivity >= IDLE_EXPIRE_MS && !room.members.some((m) => m.connected);
 
-/** Earliest time the alarm must fire. */
-export function nextAlarm(room) {
+/**
+ * When the Durable Object alarm must fire next.
+ *
+ * With `now` (what the Durable Object passes): returns `now` when work is due right away (tick would
+ * change the room, or the room is expired), otherwise the earliest FUTURE time something will happen,
+ * or null when nothing is pending. Conditions tick cannot act on (host offline past grace with nobody
+ * online to take over, idle time passed while someone is still connected) drop out instead of staying
+ * in the past: a past alarm re-fires immediately and every run writes Durable Object rows.
+ * Whatever re-enables them (a join, a disconnect) re-schedules the alarm through the DO's save.
+ *
+ * Without `now`: the earliest raw timestamp of any pending condition (legacy, for inspection only).
+ */
+export function nextAlarm(room, now) {
   const times = [];
   if (room.status === 'game' && room.flow?.deadline != null) times.push(room.flow.deadline);
   room.members.forEach((m) => {
@@ -336,8 +347,25 @@ export function nextAlarm(room) {
       if (m.seat === room.hostSeat) times.push(m.offlineSince + HOST_GRACE_MS);
     }
   });
-  times.push(room.lastActivity + IDLE_EXPIRE_MS);
-  return Math.min(...times);
+  const idleAt = room.lastActivity + IDLE_EXPIRE_MS;
+  if (now === undefined) return Math.min(...times, idleAt);
+
+  if (isExpired(room, now) || tick(room, now) !== room) return now;
+  if (!room.members.some((m) => m.connected)) times.push(idleAt);
+  const future = times.filter((t) => Number.isFinite(t) && t > now);
+  return future.length ? Math.min(...future) : null;
+}
+
+/**
+ * Safety net for the Durable Object: an alarm that is already due is pushed at least this far out, so
+ * a rules bug can never become a tight alarm loop (every run costs Durable Object rows_written).
+ * Future targets (step deadlines) are honoured exactly.
+ */
+export const MIN_ALARM_DELAY_MS = 1000;
+/** When to actually set the alarm for `nextAlarm(room, now)` = `target` (ms epoch or null = no alarm). */
+export function alarmTime(target, now) {
+  if (target == null || !Number.isFinite(target)) return null;
+  return target > now ? target : now + MIN_ALARM_DELAY_MS;
 }
 
 /** Host finished playing cue `id`. */

@@ -17,6 +17,7 @@ export async function seatFromGuestId(gid) {
 }
 const validGid = (gid) => typeof gid === 'string' && /^[A-Za-z0-9_-]{16,64}$/.test(gid);
 
+
 export class Room extends Server {
   static options = { hibernate: true };
 
@@ -25,12 +26,31 @@ export class Room extends Server {
 
   async onStart() {
     this.room = (await this.ctx.storage.get('room')) || null;
+    this.saved = this.room ? JSON.stringify(this.room) : null; // last persisted room, to skip no-op writes
+    this.alarmAt = (await this.ctx.storage.getAlarm()) ?? null; // currently scheduled alarm (a read, not a write)
   }
 
+  /**
+   * Persist the room only if it changed, and (re)arm the alarm only if its time changed.
+   * Storage puts and setAlarm/deleteAlarm each count against the Durable Object rows_written quota.
+   */
   async save() {
     if (!this.room) return;
-    await this.ctx.storage.put('room', this.room);
-    await this.ctx.storage.setAlarm(Math.max(Date.now() + 50, R.nextAlarm(this.room)));
+    const json = JSON.stringify(this.room);
+    if (json !== this.saved) {
+      await this.ctx.storage.put('room', this.room);
+      this.saved = json;
+    }
+    await this.schedule();
+  }
+
+  async schedule() {
+    const now = Date.now();
+    const at = R.alarmTime(R.nextAlarm(this.room, now), now);
+    if (at === this.alarmAt) return;
+    if (at === null) await this.ctx.storage.deleteAlarm();
+    else await this.ctx.storage.setAlarm(at);
+    this.alarmAt = at;
   }
 
   getConnectionTags(conn, ctx) {
@@ -149,11 +169,16 @@ export class Room extends Server {
   }
 
   async onAlarm() {
-    if (!this.room) this.room = (await this.ctx.storage.get('room')) || null;
+    this.alarmAt = null; // this alarm has fired; nothing is scheduled now
+    if (!this.room) {
+      this.room = (await this.ctx.storage.get('room')) || null;
+      this.saved = this.room ? JSON.stringify(this.room) : null;
+    }
     if (!this.room) return;
     const now = Date.now();
     if (R.isExpired(this.room, now)) {
       this.room = null;
+      this.saved = null;
       await this.ctx.storage.deleteAll();
       return;
     }
