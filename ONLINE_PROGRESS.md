@@ -16,6 +16,22 @@ Branch `online-rooms` (from `tamil-narrator`). Local commits only. No push, no d
 - [x] e2e `e2e/online.e2e.mjs` (5 guests) green; headless protocol test `e2e/online-protocol.mjs` green
 - [ ] Google sign-in: stub only (needs OAuth client + D1; steps below)
 
+## Live (deployed 25 Oct 2026, 14:36 IST)
+- Worker: https://mafia-dealer.dhanushprince.workers.dev (play: `/online`; health: `/api/health` or `/health`)
+- workers.dev subdomain `dhanushprince` was registered for this account (it had none).
+- Health JSON: `{ ok, version, commit, time, rooms: { ok, ms }, google, turn }`; `rooms` pings a Durable Object.
+- Verified live: `node e2e/online-protocol.mjs https://mafia-dealer.dhanushprince.workers.dev` (3 runs OK) and
+  `BASE_URL=https://mafia-dealer.dhanushprince.workers.dev TURN_URL=... node e2e/online.e2e.mjs` (E2E OK).
+- Redeploy: `CLOUDFLARE_API_TOKEN=... CLOUDFLARE_ACCOUNT_ID=... npm run deploy` (or `npx wrangler login` first).
+
+## Pages site -> Worker rooms
+- The Pages build is static. Set `VITE_ROOMS_HOST=mafia-dealer.dhanushprince.workers.dev` in Cloudflare Pages ->
+  mafia-dealer -> Settings -> Variables (Production and Preview) and redeploy; `/online` then talks to the Worker.
+- The Worker accepts browser origins: itself, `https://mafia-dealer.pages.dev`, `https://<branch|hash>.mafia-dealer.pages.dev`,
+  localhost, plus env `ALLOWED_ORIGINS` (comma separated). Other origins get 403 on `/parties/*`; CORS on `/api/config|health`.
+- If the room server can't be reached in 8 s, `/online` shows "Can't reach the room server" with Try again.
+- `?debug=1` exposes `window.__mafiaView` (the player's own view) for e2e on production builds.
+
 ## Design
 - Worker (`worker/index.js`): `/api/config` (Google on/off + ICE servers), `/api/auth/*` (better-auth, only when
   configured), PartyServer rooms at `/parties/room/<CODE>`, static app through Workers assets.
