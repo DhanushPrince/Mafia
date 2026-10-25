@@ -44,3 +44,8 @@ Runs on every push to `main` and `online-rooms`, on every pull request, and on d
 - Excluded from analysis: `node_modules`, `dist`, `e2e/`, `public/` (audio clips and static files), generated
   `src/audio/*.json` line tables, `coverage/`, and test files (tests are indexed as tests, not sources).
 - Run locally: `npm run test:coverage` for coverage; `npm audit --omit=dev --audit-level=high` for advisories.
+- Coverage on new code (the Quality Gate needs 80%): after `npm run test:coverage`, `npm run coverage:new [baseRef]`
+  scores the lines changed vs `origin/main` the way Sonar does ((covered lines + covered conditions) / (lines + conditions)).
+  Vitest reports every file under `src/` and `worker/` (`test.coverage.include` in `vite.config.js`), not only imported
+  ones, so untested files show up as 0% locally just as they do in Sonar. Component and hook tests run in jsdom via a
+  `// @vitest-environment jsdom` comment at the top of the test file; everything else stays in the node environment.

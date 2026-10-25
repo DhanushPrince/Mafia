@@ -38,7 +38,8 @@ export class Mesh {
 
   setLocal(stream) {
     this.local = stream;
-    for (const [seat] of this.peers) this.reset(seat); // re-offer with the new tracks
+    // snapshot the seats: reset() re-inserts into the Map, which a live iteration would visit again forever
+    for (const seat of [...this.peers.keys()]) this.reset(seat); // re-offer with the new tracks
   }
 
   /** Apply camera / mic switches (user toggles + night auto-off) and tell peers. */
@@ -90,7 +91,7 @@ export class Mesh {
 
   /** Watchdog: a connection that never came up (lost offer, failed ICE) is rebuilt on both ends. */
   check(stuckMs = 8000) {
-    for (const [seat, p] of this.peers) {
+    for (const [seat, p] of [...this.peers]) { // snapshot: reset() re-inserts the seat
       const st = p.pc.connectionState;
       if (st === 'failed' || (st !== 'connected' && st !== 'connecting' && Date.now() - p.born > stuckMs)) {
         this.reset(seat);
