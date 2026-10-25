@@ -65,6 +65,11 @@ export class Room extends Server {
         return;
       }
       this.room = R.createRoom(this.name, now, { fast: url.searchParams.get('fast') === '1' });
+    } else if (url.searchParams.get('create') === '1' && !this.room.members.some((m) => m.seat === seat)) {
+      // random code collided with someone else's room: the client picks a new code
+      this.send(conn, { t: 'error', action: 'join', code: 'room_exists' });
+      conn.close(4009, 'room exists');
+      return;
     }
     this.tryJoin(conn, seat, url.searchParams.get('name') || '', now);
     await this.save();

@@ -7,14 +7,18 @@ import { getAuth, googleEnabled } from './auth.js';
 
 export { Room } from './room.js';
 
-const ICE_SERVERS = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }];
+const STUN = { urls: ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] };
+/** Public STUN, plus a TURN relay when configured (needed for players behind strict NATs / firewalls). */
+const iceServers = (env) => (env.TURN_URLS
+  ? [STUN, { urls: env.TURN_URLS.split(',').map((u) => u.trim()), username: env.TURN_USERNAME, credential: env.TURN_CREDENTIAL }]
+  : [STUN]);
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
     if (url.pathname === '/api/config') {
-      return Response.json({ google: googleEnabled(env), iceServers: ICE_SERVERS });
+      return Response.json({ google: googleEnabled(env), iceServers: iceServers(env) });
     }
 
     if (url.pathname.startsWith('/api/auth/')) {

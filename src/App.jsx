@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useState } from 'react';
+import { lazy, Suspense, useEffect, useReducer, useState } from 'react';
 import PlayerCountScreen from './components/PlayerCountScreen';
 import NamesScreen from './components/NamesScreen';
 import DealingScreen from './components/DealingScreen';
@@ -17,6 +17,10 @@ import { narrator, narratorVoice } from './audio/narrator';
 import { nameVoice } from './audio/nameVoice';
 import { unlockAmbient } from './audio/ambient';
 import { TIMING } from './game/timing';
+
+// online rooms live under /online and /r/CODE (loaded on demand)
+const OnlineApp = lazy(() => import('./online/OnlineApp'));
+const isOnlinePath = (path = window.location.pathname) => path === '/online' || /^\/r\/[A-Za-z]{4}\/?$/.test(path);
 
 const loadResumable = () => {
   const saved = deserialize(loadSavedGameRaw());
@@ -46,6 +50,16 @@ function App() {
   const [savedGame, setSavedGame] = useState(() => loadResumable());
   const [showVolumeHint, setShowVolumeHint] = useState(() => !volumeHintSeen());
   const [boundaryKey, setBoundaryKey] = useState(0);
+  const [online, setOnline] = useState(() => isOnlinePath());
+  useEffect(() => {
+    const onPop = () => setOnline(isOnlinePath());
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+  const openOnline = (on) => {
+    window.history.pushState({}, '', on ? '/online' : '/');
+    setOnline(on);
+  };
 
   const updateSettings = (patch) => {
     setSettings((prev) => {
@@ -172,6 +186,19 @@ function App() {
 
   const canResume = Boolean(deserialize(loadSavedGameRaw()));
 
+  if (online) {
+    return (
+      <div className="app relative min-h-screen text-white overflow-hidden">
+        <Background />
+        <div className="relative z-10">
+          <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-white/60">Loading…</div>}>
+            <OnlineApp onExit={() => openOnline(false)} />
+          </Suspense>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="app relative min-h-screen text-white overflow-hidden">
       <Background />
@@ -186,6 +213,7 @@ function App() {
             onSettings={updateSettings}
             resume={describeSaved(savedGame)}
             onResume={resumeGame}
+            onOnline={() => openOnline(true)}
           />
         )}
         {screen === 'names' && (
