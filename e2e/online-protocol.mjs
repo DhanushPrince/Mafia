@@ -53,7 +53,7 @@ console.log('reconnect keeps seat ok; members', host.view.members.map((m) => m.n
 
 const all = [host, ...others];
 others.forEach((c) => c.send({ t: 'ready', ready: true }));
-await until(() => host.view.canStart, 5000, 'canStart');
+await until(() => host.view.canStart?.ok, 5000, 'canStart');
 host.send({ t: 'start' });
 await until(() => all.every((c) => c.view.status === 'deal'), 5000, 'deal');
 for (const c of all) {

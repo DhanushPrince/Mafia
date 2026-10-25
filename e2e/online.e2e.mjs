@@ -56,7 +56,7 @@ async function enterName(p, name) {
 
 try {
   // ---- host creates a room
-  await host.page.goto(`${BASE}/online?fast=1&tts=none`);
+  await host.page.goto(`${BASE}/online?fast=1&tts=none&debug=1`);
   // blank and emoji names are refused locally
   await host.page.getByTestId('name-input').fill('😀😀');
   await host.page.getByTestId('name-save').click();
@@ -74,12 +74,12 @@ try {
   // ---- others join by link (one by code)
   for (const p of players.slice(1)) {
     if (p.i === 2) {
-      await p.page.goto(`${BASE}/online?tts=none`);
+      await p.page.goto(`${BASE}/online?tts=none&debug=1`);
       await enterName(p, p.typed);
       await p.page.getByTestId('join-code').fill(code.toLowerCase());
       await p.page.getByTestId('join-btn').click();
     } else {
-      await p.page.goto(`${BASE}/r/${code}?tts=none`);
+      await p.page.goto(`${BASE}/r/${code}?tts=none&debug=1`);
       await enterName(p, p.typed);
     }
     if (p.i === 3) {

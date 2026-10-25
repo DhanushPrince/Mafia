@@ -27,6 +27,8 @@ const chip = 'px-3 py-1.5 rounded-full border text-sm transition-colors';
 export const isOnlinePath = (path = window.location.pathname) => path === '/online' || /^\/r\/[A-Za-z]{4}\/?$/.test(path);
 const codeFromPath = () => (window.location.pathname.match(/^\/r\/([A-Za-z]{4})/)?.[1] || '').toUpperCase();
 // keep ?fast / ?tts debug params when moving between /online and /r/CODE
+// e2e / debugging hooks (window.__mafiaView = this player's own view) in dev or with ?debug=1
+const debugHooks = () => import.meta.env.DEV || new URLSearchParams(window.location.search).has('debug');
 const go = (path) => window.history.pushState({}, '', path + window.location.search);
 
 function useNow(ms = 250) {
@@ -251,8 +253,8 @@ function Lobby({ view, send, error, clearError }) {
       </div>
 
       {host ? (
-        <PrimaryButton data-testid="start-game" disabled={!view.canStart} onClick={() => send({ t: 'start' })}>
-          {view.canStart ? 'Deal the cards' : players.length < 4 ? 'Waiting for 4+ players' : 'Waiting for everyone to be ready'}
+        <PrimaryButton data-testid="start-game" disabled={!view.canStart?.ok} onClick={() => send({ t: 'start' })}>
+          {view.canStart?.ok ? 'Deal the cards' : players.length < 4 ? 'Waiting for 4+ players' : 'Waiting for everyone to be ready'}
         </PrimaryButton>
       ) : (
         <p className="text-center text-white/50 text-sm">Waiting for the host to start…</p>
@@ -534,7 +536,7 @@ function useVideo(view, send) {
       // offers that arrived while we were still asking for the camera
       pending.current.splice(0).forEach(([f, d]) => mesh.onSignal(f, d));
       watchdog = setInterval(() => mesh.check(), 3000);
-      if (import.meta.env.DEV) window.__mesh = mesh;
+      if (debugHooks()) window.__mesh = mesh;
       setRemotes({});
     })();
     return () => { cancelled = true; clearInterval(watchdog); mesh?.close(); meshRef.current = null; setLocal(null); };
@@ -595,7 +597,7 @@ function Room({ code, identity, opts, onLeave, onIdentity }) {
   const names = useMemo(() => Object.fromEntries((view?.members || []).map((m) => [m.seat, m.name])), [view?.members]);
   const caption = useNarration(view, send, names);
   useWakeLock(view?.status === 'game' || view?.status === 'deal');
-  useEffect(() => { if (import.meta.env.DEV) window.__mafiaView = view; }, [view]); // e2e / debugging
+  useEffect(() => { if (debugHooks()) window.__mafiaView = view; }, [view]); // e2e / debugging
 
   // keep the URL shareable and the stored name in sync with the room
   useEffect(() => { if (view?.code && window.location.pathname !== `/r/${view.code}`) window.history.replaceState({}, '', `/r/${view.code}${window.location.search}`); }, [view?.code]);
