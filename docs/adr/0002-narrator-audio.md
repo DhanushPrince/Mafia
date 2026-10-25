@@ -30,8 +30,9 @@ by device, and the game must never stall waiting for audio.
   first Tamil name model download).
 - Licences:
   - Piper Tamil Rasa voices are CC-BY-4.0: the app must credit AI4Bharat Rasa and tinisoft.
-  - The vendored phonemizer bundles espeak-ng, which is GPL-3.0. Shipping it inside the app is a licence
-    question to resolve before any closed-source or store release (replace, or comply with GPL-3.0).
+  - The vendored phonemizer bundles espeak-ng, which is GPL-3.0. This only matters if the app is ever
+    distributed in a store or as closed source (then replace it, or comply with GPL-3.0); the app is a
+    prototype today.
 - New lines need clips rendered for all 4 voices; `src/audio/clips.test.js` checks parity.
 
 ## Alternatives considered
