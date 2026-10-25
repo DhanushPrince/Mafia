@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { BookOpen, Users, ChevronUp, ChevronDown, Crown, Smartphone, Play, RotateCcw, Timer, Moon, Sun, Languages } from 'lucide-react';
+import { BookOpen, Users, ChevronUp, ChevronDown, Crown, Smartphone, Play, RotateCcw, Timer, Moon, Sun, Languages, Globe } from 'lucide-react';
 import { narrator, LANGS, normalizeLang, narratorVoice, voicesFor } from '../audio/narrator';
 
 import { MIN_PLAYERS, MAX_PLAYERS } from '../game/roles';
@@ -304,7 +304,7 @@ function ModeSettings({ settings, onSettings }) {
   );
 }
 
-function PlayerCountScreen({ initialCount = 6, onStart, onRules, settings, onSettings, resume, onResume }) {
+function PlayerCountScreen({ initialCount = 6, onStart, onRules, settings, onSettings, resume, onResume, onOnline }) {
   const [playerCount, setPlayerCount] = useState(initialCount);
 
   const handleStart = (e) => {
@@ -367,6 +367,16 @@ function PlayerCountScreen({ initialCount = 6, onStart, onRules, settings, onSet
                 </span>
               </motion.button>
             </form>
+            {onOnline && (
+              <button
+                type="button"
+                data-testid="play-online"
+                onClick={onOnline}
+                className="mt-5 w-full flex items-center justify-center gap-2 rounded-lg border border-white/15 bg-white/5 py-3 text-violet-100 font-bold tracking-widest uppercase hover:bg-white/10"
+              >
+                <Globe size={18} /> Play online · video room
+              </button>
+            )}
           </div>
         </div>
       </motion.div>

@@ -54,6 +54,15 @@ The site is hosted on Cloudflare Pages, connected to this GitHub repo:
 
 No manual deploy step or `gh-pages` branch is needed.
 
+## Online rooms and docs
+
+Play on separate phones in one room with video: `/online` (Cloudflare Worker + Durable Objects).
+
+- Architecture, protocol, deploy and env vars: [docs/ONLINE_ROOMS.md](docs/ONLINE_ROOMS.md)
+- Architecture Decision Records: [docs/adr/](docs/adr/README.md)
+- Security scan (SonarQube Cloud, npm audit) setup: [docs/SECURITY_SCAN.md](docs/SECURITY_SCAN.md)
+- Build log and run notes: [ONLINE_PROGRESS.md](ONLINE_PROGRESS.md)
+
 ## Tech Stack
 
 - React 18 + Vite 6

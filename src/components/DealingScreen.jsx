@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { EyeOff, Crown, X, Moon, Volume2 } from 'lucide-react';
 import Card from './Card';
 import { LiquidButton, HoldButton, PrimaryButton } from './ui';
-import { ROLES } from '../game/roles';
+import { ROLES } from '../game/roleVisuals';
 import NameVoiceStatus from './NameVoiceStatus';
 import { nameFitClass } from '../game/nameFit';
 import { dealFlow, initialDealFlow, isBusy, availableNames as namesLeft } from './dealFlow';

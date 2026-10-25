@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Crown, Skull, Users } from 'lucide-react';
-import { ROLES, getWinner } from '../game/roles';
+import { getWinner } from '../game/roles';
+import { ROLES } from '../game/roleVisuals';
 import { LiquidButton } from './ui';
 
 function GameMasterScreen({ players, eliminated, onToggle, onBack, onRestart }) {

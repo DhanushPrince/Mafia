@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Volume2, VolumeX, X, Moon, Sun, Skull, HelpCircle, ThumbsUp, ThumbsDown, Timer, Vote, ShieldCheck, Search, Trophy,
 } from 'lucide-react';
-import { ROLES } from '../game/roles';
+import { ROLES } from '../game/roleVisuals';
 import {
   PHASES, isTurnPhase, currentTurnRole, selectTargets, selectCurrentSelection, selectDetectiveResult,
   entryClips, exitClips, voteClips, alivePlayers,

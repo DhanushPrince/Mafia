@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import { HelpCircle, CheckCircle } from 'lucide-react';
-import { ROLES } from '../game/roles';
+import { ROLES } from '../game/roleVisuals';
 import { nameFitClass } from '../game/nameFit';
 
 // The build's CSS minifier drops -webkit-backface-visibility from the utility, so set it inline as well.
