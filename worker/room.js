@@ -145,11 +145,17 @@ export class Room extends Server {
       case 'cueDone': res = R.cueDone(r, seat, msg.id, now); break;
       case 'rematch': res = R.rematch(r, seat, now); break;
       case 'lobby': res = R.backToLobby(r, seat, now); break;
+      case 'leave': res = R.leave(r, seat, now); break;
       default: return;
     }
     if (res) {
       if (res.error) this.send(conn, { t: 'error', action: msg.t, ...res.error });
       this.room = res.room || res;
+    }
+    if (msg.t === 'leave') {
+      // deliberate exit: close every socket of that seat (the client does not reconnect after 4001);
+      // peers drop the seat's video tile from the next view (it is no longer a connected player)
+      for (const c of this.getConnections(seat)) { this.send(c, { t: 'left' }); c.close(4001, 'left room'); }
     }
     if (this.room !== r || msg.t === 'join') {
       await this.save();

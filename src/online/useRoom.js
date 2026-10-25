@@ -44,6 +44,7 @@ export default function useRoom({ code, gid, name, create, fast, onRtc }) {
       if (e.code === 4004) { setFatal('no_room'); sock.close(); }
       if (e.code === 4003) { setFatal('kicked'); sock.close(); }
       if (e.code === 4009) sock.close();
+      if (e.code === 4001) sock.close(); // we left on purpose: never reconnect
     });
     sock.addEventListener('message', (e) => {
       let m;
@@ -55,6 +56,7 @@ export default function useRoom({ code, gid, name, create, fast, onRtc }) {
       } else if (m.t === 'error') setError({ ...m, at: Date.now() });
       else if (m.t === 'fatal') { setFatal(m.code); sock.close(); }
       else if (m.t === 'rtc') rtcRef.current?.(m.from, m.data);
+      else if (m.t === 'left') sock.close();
     });
     return () => { clearTimeout(timerRef.current); sock.close(); sockRef.current = null; };
   }, [code, gid, create, fast]);
@@ -74,6 +76,19 @@ export default function useRoom({ code, gid, name, create, fast, onRtc }) {
     s.reconnect();
   }, []);
 
+  /**
+   * Leave the room on purpose: tell the server (it frees the seat / takes us out of the game), then
+   * close the socket for good. PartySocket's close() also stops its auto-reconnect.
+   */
+  const leave = useCallback(() => {
+    const s = sockRef.current;
+    clearTimeout(timerRef.current);
+    if (!s) return;
+    if (s.readyState === 1) s.send(JSON.stringify({ t: 'leave' })); // queued before the close frame
+    s.close(1000, 'left room');
+    sockRef.current = null;
+  }, []);
+
   const serverNow = useCallback(() => Date.now() + clockRef.current, []);
-  return { view, error, clearError: () => setError(null), fatal, online, unreachable, retry, send, serverNow };
+  return { view, error, clearError: () => setError(null), fatal, online, unreachable, retry, send, leave, serverNow };
 }

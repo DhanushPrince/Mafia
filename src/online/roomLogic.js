@@ -13,7 +13,7 @@
  * what each seat may see is computed by `viewFor(room, seat)`.
  */
 import {
-  reducer, PHASES, isTurnPhase, currentTurnRole, selectTargets, entryClips, exitClips, voteClips, teamOf, createInitialState,
+  reducer, PHASES, isTurnPhase, currentTurnRole, selectTargets, entryClips, exitClips, voteClips, teamOf, createInitialState, computeWinner,
 } from '../game/engine.js';
 import { generateDeck, MIN_PLAYERS, MAX_PLAYERS } from '../game/roles.js';
 import { normalizeTimers } from '../game/timing.js';
@@ -73,7 +73,7 @@ export function createRoom(code, now, settings = {}) {
     hostSeat: null,
     status: 'lobby', // lobby | deal | game
     settings: normalizeSettings(settings),
-    members: [], // { seat, name, ready, connected, joinedAt, offlineSince, spectator }
+    members: [], // { seat, name, ready, connected, joinedAt, offlineSince, spectator, left? }
     kicked: [],
     deal: null, // { deck: [role], picks: { [cardIndex]: seat }, seen: { [seat]: true }, seats: [seat] }
     game: null, // engine state (player name = seat)
@@ -91,6 +91,9 @@ const isHost = (room, seat) => room.hostSeat === seat;
 const players = (room) => room.members.filter((m) => !m.spectator);
 const updateMember = (room, seat, patch) => ({ ...room, members: room.members.map((m) => (m.seat === seat ? { ...m, ...patch } : m)) });
 const err = (room, code, extra = {}) => ({ room, error: { code, ...extra } });
+/** Who takes over as host: the longest-seated connected member (other than `exclude`), or null. */
+const nextHostSeat = (room, exclude = null) =>
+  room.members.filter((m) => m.connected && m.seat !== exclude).sort((a, b) => a.joinedAt - b.joinedAt)[0]?.seat ?? null;
 
 // ---------------------------------------------------------------- membership
 
@@ -102,7 +105,9 @@ const err = (room, code, extra = {}) => ({ room, error: { code, ...extra } });
 export function join(room, seat, rawName, now) {
   const existing = member(room, seat);
   if (existing) {
+    // a player who left a deal/game comes back as a spectator, still out of that game (see leave())
     let next = updateMember(room, seat, { connected: true, offlineSince: null });
+    if (next.hostSeat == null) next = { ...next, hostSeat: seat };
     if (isHost(next, seat)) next = { ...next, hostOfflineSince: null };
     return { room: touch(next, now) };
   }
@@ -133,7 +138,7 @@ export function rename(room, seat, rawName, now) {
 
 export function disconnect(room, seat, now) {
   const m = member(room, seat);
-  if (!m) return room;
+  if (!m || !m.connected) return room; // gone already (left, or a second socket of the same seat)
   let next = updateMember(room, seat, { connected: false, offlineSince: now });
   if (isHost(room, seat)) next = { ...next, hostOfflineSince: now };
   return next;
@@ -171,7 +176,7 @@ function startDeal(room, now, rand = Math.random) {
   return {
     ...room,
     status: 'deal',
-    members: room.members.map((m) => ({ ...m, spectator: !seats.includes(m.seat), ready: false })),
+    members: room.members.map((m) => ({ ...m, spectator: !seats.includes(m.seat), ready: false, left: false })),
     deal: { deck, picks: {}, seen: {}, seats },
     game: null,
     flow: null,
@@ -233,7 +238,19 @@ function beginGame(room, now) {
   const roster = d.seats.map((seat) => ({ name: seat, role: d.deck[pickedCardOf(room, seat)] }));
   let game = reducer(createInitialState({}, { turnSec: room.settings.turnSec, discussMin: room.settings.discussMin }, room.settings.lang), { type: 'NEW_GAME' });
   game = reducer(game, { type: 'START_NIGHT', players: roster });
+  // players who left during the card pick start the game already out
+  room.members.filter((m) => m.left && d.seats.includes(m.seat)).forEach((m) => { game = knockOut(game, m.seat); });
+  const { winner } = computeWinner(game.players);
+  if (winner) game = { ...game, phase: PHASES.END, winner, resumeTo: null };
   return enterPhase({ ...room, status: 'game', game, votes: {}, mafiaPicks: {} }, now);
+}
+
+/** Engine state with player `seat` out (dead) and any night pick on them dropped. */
+function knockOut(game, seat) {
+  const players = game.players.map((p) => (p.name === seat ? { ...p, alive: false } : p));
+  const selections = Object.fromEntries(Object.entries(game.night.selections).filter(([, target]) => target !== seat));
+  const result = game.night.selections.detective === seat ? null : game.night.result;
+  return { ...game, players, night: { ...game.night, selections, result } };
 }
 
 // ---------------------------------------------------------------- timeline
@@ -318,8 +335,8 @@ function housekeeping(room, now) {
   const host = member(r, r.hostSeat);
   const hostGone = !host || (!host.connected && host.offlineSince && now - host.offlineSince >= HOST_GRACE_MS);
   if (hostGone) {
-    const next = r.members.filter((m) => m.connected).sort((a, b) => a.joinedAt - b.joinedAt)[0];
-    if (next && next.seat !== r.hostSeat) r = { ...r, hostSeat: next.seat, hostOfflineSince: null };
+    const next = nextHostSeat(r);
+    if (next && next !== r.hostSeat) r = { ...r, hostSeat: next, hostOfflineSince: null };
   }
   return r;
 }
@@ -440,8 +457,62 @@ export function backToLobby(room, seat, now) {
   if (!isHost(room, seat) || room.status === 'lobby') return room;
   return touch({
     ...room, status: 'lobby', deal: null, game: null, flow: null, votes: {}, mafiaPicks: {},
-    members: room.members.map((m) => ({ ...m, spectator: false, ready: false })),
+    // members who left the game (and did not come back) leave the room now; their names are free
+    members: room.members.filter((m) => !(m.left && !m.connected)).map((m) => ({ ...m, spectator: false, ready: false, left: false })),
   }, now);
+}
+
+// ---------------------------------------------------------------- leaving
+
+/**
+ * Seat `seat` leaves the room on purpose (the exit button), unlike a dropped connection.
+ *  - lobby: the member is removed and the name is free again.
+ *  - deal: the player is out of the coming game. An unpicked card is assigned to them (the deck size
+ *    must match the dealt seats) and marked seen, so the night can still start; they start dead.
+ *  - game: the player is out (dead, like an eliminated player); votes and night picks on them are
+ *    dropped, the win check runs at once (a win ends the game), and a vote that only waited for them
+ *    completes. Timed steps keep running, so nothing waits on the leaver.
+ * In deal/game the member stays listed (names of seats in the game) as an offline spectator; if they
+ * come back they spectate until the next deal. A leaving host hands over to the next connected member.
+ */
+export function leave(room, seat, now) {
+  if (!member(room, seat)) return room;
+  let r;
+  if (room.status === 'lobby') {
+    r = { ...room, members: room.members.filter((m) => m.seat !== seat) };
+  } else {
+    r = updateMember(room, seat, { connected: false, offlineSince: now, spectator: true, ready: false, left: true });
+    r = room.status === 'deal' ? leaveDeal(r, seat, now) : leaveGame(r, seat, now);
+  }
+  if (r.hostSeat === seat) r = { ...r, hostSeat: nextHostSeat(r, seat), hostOfflineSince: null };
+  return touch(r, now);
+}
+
+function leaveDeal(room, seat, now) {
+  const d = room.deal;
+  if (!d || !d.seats.includes(seat)) return room;
+  let { picks } = d;
+  if (pickedCardOf(room, seat) === null) {
+    const free = d.deck.findIndex((_, i) => picks[i] === undefined);
+    if (free >= 0) picks = { ...picks, [free]: seat };
+  }
+  const next = { ...room, deal: { ...d, picks, seen: { ...d.seen, [seat]: true } } };
+  return d.seats.every((s) => next.deal.seen[s]) ? beginGame(next, now) : next;
+}
+
+function leaveGame(room, seat, now) {
+  const g = room.game;
+  if (!g || g.phase === PHASES.END || !gamePlayer(room, seat)?.alive) return room;
+  const game = knockOut(g, seat);
+  const keep = (obj) => Object.fromEntries(Object.entries(obj).filter(([k, v]) => k !== seat && v !== seat));
+  const r = { ...room, game, votes: keep(room.votes), mafiaPicks: keep(room.mafiaPicks) };
+  const { winner } = computeWinner(game.players);
+  if (winner) return enterPhase({ ...r, game: { ...game, phase: PHASES.END, winner, resumeTo: null } }, now);
+  if (r.flow?.step === 'voting' && game.phase === PHASES.VOTE) {
+    const alive = game.players.filter((p) => p.alive);
+    if (alive.every((p) => r.votes[p.name] !== undefined)) return tick(completeStep(r, now), now);
+  }
+  return r;
 }
 
 // ---------------------------------------------------------------- per-seat view

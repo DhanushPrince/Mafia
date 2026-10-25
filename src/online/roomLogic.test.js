@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   createRoom, join, rename, disconnect, setReady, updateSettings, kick, start, pickCard, markSeen, forceNight,
-  tick, cueDone, nightSelect, castVote, tallyVotes, viewFor, nextAlarm, rematch, backToLobby, pickedCardOf,
+  tick, cueDone, nightSelect, castVote, tallyVotes, viewFor, nextAlarm, rematch, backToLobby, pickedCardOf, leave,
   randomRoomCode, isRoomCode, onlineTiming, HOST_GRACE_MS, LOBBY_GRACE_MS, IDLE_EXPIRE_MS, isExpired, alarmTime, MIN_ALARM_DELAY_MS,
 } from './roomLogic';
 import { PHASES } from '../game/engine';
@@ -380,5 +380,135 @@ describe('alarmTime safety net', () => {
     expect(alarmTime(null, 1000)).toBeNull();
     expect(alarmTime(Infinity, 1000)).toBeNull();
     expect(MIN_ALARM_DELAY_MS).toBeGreaterThanOrEqual(1000);
+  });
+});
+
+describe('leave (exit button)', () => {
+  const alive = (room, seat) => room.game.players.find((p) => p.name === seat).alive;
+
+  it('lobby: the member is removed and the name is free again', () => {
+    let room = lobby(4);
+    room = leave(room, 's2', now());
+    expect(room.members.map((m) => m.seat)).toEqual(['s0', 's1', 's3']);
+    expect(room.hostSeat).toBe('s0');
+    // someone else can take the name; the leaver can come back as a new member
+    expect(join(room, 's9', 'Karthik', now()).error).toBeUndefined();
+    expect(join(room, 's2', 'Karthik', now()).room.members.find((m) => m.seat === 's2').spectator).toBe(false);
+    expect(leave(room, 'nobody', now())).toBe(room);
+  });
+
+  it('host leaving hands the host to the longest-seated connected member', () => {
+    let room = lobby(4);
+    room = disconnect(room, 's1', now()); // offline members are skipped
+    room = leave(room, 's0', now());
+    expect(room.hostSeat).toBe('s2');
+    expect(viewFor(room, 's2').isHost).toBe(true);
+  });
+
+  it('last member leaving empties the room; it expires without a past alarm', () => {
+    let room = lobby(1);
+    room = leave(room, 's0', now());
+    expect(room.members).toHaveLength(0);
+    expect(room.hostSeat).toBeNull();
+    const at = now();
+    const next = nextAlarm(room, at);
+    expect(next).toBe(room.lastActivity + IDLE_EXPIRE_MS);
+    expect(next).toBeGreaterThan(at);
+    expect(isExpired(room, room.lastActivity + IDLE_EXPIRE_MS)).toBe(true);
+    // the next person to join becomes host
+    expect(join(room, 's5', 'Ravi', now()).room.hostSeat).toBe('s5');
+  });
+
+  it('deal: an unpicked card goes to the leaver so the game can still start, and they start out', () => {
+    let room = start(lobby(5), 's0', now(), seeded(7)).room;
+    ['s0', 's1', 's2', 's3'].forEach((s, i) => { room = pickCard(room, s, i, now()).room; });
+    room = leave(room, 's4', now());
+    expect(room.status).toBe('deal');
+    expect(pickedCardOf(room, 's4')).toBe(4);
+    expect(room.members.find((m) => m.seat === 's4')).toMatchObject({ spectator: true, connected: false, left: true });
+    // coming back during the deal does not put them back in
+    room = join(room, 's4', 'Ravi', now()).room;
+    ['s0', 's1', 's2', 's3'].forEach((s) => { room = markSeen(room, s, now()); });
+    expect(room.status).toBe('game');
+    if (room.game.phase !== PHASES.END) expect(alive(room, 's4')).toBe(false);
+    expect(room.game.players.filter((p) => p.alive)).toHaveLength(4);
+  });
+
+  it('mid-game: the leaver is out, night picks on them are dropped, and nothing stalls', () => {
+    let room = inGame(5);
+    room = runUntil(room, (r) => r.game.phase === PHASES.MAFIA_TURN && r.flow.step === 'open');
+    const [maf] = seatsWith(room, 'mafia');
+    const victim = room.game.players.find((p) => p.role !== 'mafia' && p.name !== 's0').name;
+    room = nightSelect(room, maf, victim, now()).room;
+    expect(room.game.night.selections.mafia).toBe(victim);
+    room = leave(room, victim, now());
+    expect(alive(room, victim)).toBe(false);
+    expect(room.game.night.selections.mafia).toBeUndefined();
+    expect(room.mafiaPicks[maf]).toBeUndefined();
+    expect(viewFor(room, 's0').members.find((m) => m.seat === victim)).toMatchObject({ spectator: true, connected: false });
+    expect(nightSelect(room, maf, victim, now()).error.code).toBe('bad_target');
+    // the timeline keeps going on its own: the game reaches morning without the leaver
+    room = runUntil(room, (r) => r.game.phase === PHASES.DAY_DISCUSS || r.game.phase === PHASES.END);
+    expect([PHASES.DAY_DISCUSS, PHASES.END]).toContain(room.game.phase);
+    // they can watch if they come back, but never play this game again
+    room = join(room, victim, 'x', now()).room;
+    expect(room.members.find((m) => m.seat === victim).spectator).toBe(true);
+    expect(alive(room, victim)).toBe(false);
+  });
+
+  it('mid-game: the last Mafia leaving ends the game for the villagers at once', () => {
+    let room = inGame(5);
+    room = runUntil(room, (r) => r.game.phase === PHASES.DAY_DISCUSS || r.game.phase === PHASES.END);
+    if (room.game.phase === PHASES.END) return;
+    seatsWith(room, 'mafia').forEach((s) => { room = leave(room, s, now()); });
+    expect(room.game.phase).toBe(PHASES.END);
+    expect(room.game.winner).toBe('villagers');
+    expect(room.flow.step).toBe('end');
+    expect(room.flow.cue.clips).toEqual(['villagers_win']);
+  });
+
+  it('mid-game: villagers leaving until Mafia equal the rest gives Mafia the win', () => {
+    let room = inGame(5);
+    const others = room.game.players.filter((p) => p.role !== 'mafia').map((p) => p.name);
+    const mafiaCount = seatsWith(room, 'mafia').length;
+    let i = 0;
+    while (room.game.phase !== PHASES.END) room = leave(room, others[i++], now());
+    expect(room.game.winner).toBe('mafia');
+    expect(others.length - i).toBe(mafiaCount);
+  });
+
+  it('voting: a vote that only waited for the leaver completes; votes for the leaver are cleared', () => {
+    let room = inGame(5);
+    room = runUntil(room, (r) => (r.game.phase === PHASES.VOTE && r.flow.step === 'voting') || r.game.phase === PHASES.END);
+    if (room.game.phase === PHASES.END) return;
+    const aliveSeats = room.game.players.filter((p) => p.alive).map((p) => p.name);
+    const leaver = aliveSeats.find((s) => s !== 's0' && roleOf(room, s) !== 'mafia');
+    const rest = aliveSeats.filter((s) => s !== leaver);
+    // one voter picks the leaver, everyone else (but the leaver) votes skip
+    room = castVote(room, rest[0], leaver, now()).room;
+    rest.slice(1).forEach((s) => { room = castVote(room, s, 'skip', now()).room; });
+    expect(room.flow.step).toBe('voting');
+    room = leave(room, leaver, now());
+    if (room.game.phase === PHASES.END) return; // the leave itself decided the game
+    expect(room.votes[rest[0]]).toBeUndefined(); // must vote again
+    expect(room.flow.step).toBe('voting');
+    room = castVote(room, rest[0], 'skip', now()).room;
+    expect(room.flow.step).not.toBe('voting');
+  });
+
+  it('back to lobby drops members who left; rematch deals only connected members', () => {
+    let room = inGame(5);
+    room = leave(room, 's4', now());
+    const lob = backToLobby(room, 's0', now());
+    expect(lob.members.map((m) => m.seat)).toEqual(['s0', 's1', 's2', 's3']);
+    expect(lob.members.every((m) => !m.left && !m.spectator)).toBe(true);
+  });
+
+  it('a socket closing after leave writes nothing more', () => {
+    let room = inGame(5);
+    room = leave(room, 's3', now());
+    expect(disconnect(room, 's3', now())).toBe(room);
+    const lob = leave(lobby(3), 's1', now());
+    expect(disconnect(lob, 's1', now())).toBe(lob);
   });
 });

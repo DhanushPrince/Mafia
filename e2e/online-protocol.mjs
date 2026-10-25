@@ -9,7 +9,8 @@ function client(name, opts = {}) {
   const id = opts.gid || gid();
   const q = new URLSearchParams({ gid: id, name, ...(opts.create ? { create: '1', fast: '1' } : {}) });
   const ws = new WebSocket(`${BASE}/parties/room/${CODE}?${q}`);
-  const c = { name, gid: id, ws, view: null, errors: [], send: (m) => ws.send(JSON.stringify(m)) };
+  const c = { name, gid: id, ws, view: null, errors: [], closeCode: null, send: (m) => ws.send(JSON.stringify(m)) };
+  ws.onclose = (e) => { c.closeCode = e.code; };
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data);
     if (m.t === 'view') c.view = m.view;
@@ -51,7 +52,16 @@ await until(() => others[0].view?.joined, 5000, 'rejoin');
 if (others[0].view.you !== seatBefore) throw new Error('seat changed on reconnect');
 console.log('reconnect keeps seat ok; members', host.view.members.map((m) => m.name).join(', '));
 
-const all = [host, ...others];
+// a guest joins, then leaves with the exit button: removed from the room, name free, socket closed (4001)
+const leaver = client('Divya');
+await leaver.open;
+await until(() => host.view.members.some((m) => m.name === 'Divya'), 5000, 'leaver joined');
+leaver.send({ t: 'leave' });
+await until(() => leaver.closeCode === 4001, 5000, 'leave closes the socket with 4001');
+await until(() => !host.view.members.some((m) => m.name === 'Divya'), 5000, 'leaver removed');
+console.log('lobby leave ok: members', host.view.members.length);
+
+let all = [host, ...others];
 others.forEach((c) => c.send({ t: 'ready', ready: true }));
 await until(() => host.view.canStart?.ok, 5000, 'canStart');
 host.send({ t: 'start' });
@@ -64,6 +74,16 @@ for (const c of all) {
 console.log('roles', all.map((c) => `${c.name}=${c.view.deal.myRole}`).join(' '));
 all.forEach((c) => c.send({ t: 'seen' }));
 await until(() => all.every((c) => c.view.status === 'game'), 5000, 'game');
+
+// a villager leaves mid-game: out of the game (dead, spectator, tile gone) and the game still ends
+const quitter = others.find((c) => c.view.game.me.role === 'villager');
+quitter.send({ t: 'leave' });
+await until(() => quitter.closeCode === 4001, 5000, 'mid-game leave closes the socket');
+await until(() => host.view.game.players.find((p) => p.seat === quitter.view.you)?.alive === false, 5000, 'quitter out');
+const qm = host.view.members.find((m) => m.seat === quitter.view.you);
+if (!qm.spectator || qm.connected) throw new Error('quitter should be an offline spectator');
+all = all.filter((c) => c !== quitter);
+console.log('mid-game leave ok:', quitter.name, 'is out');
 
 // drive the game: host acks cues; Mafia kill a villager; everyone votes for a Mafia
 let lastCue = null, rounds = 0;
@@ -90,7 +110,7 @@ while (host.view.game?.phase !== 'END') {
   await sleep(100);
 }
 console.log('winner', host.view.game.winner, 'after', ((Date.now() - t0) / 1000).toFixed(1), 's');
-const leaked = others.some((c) => c.view.game.players.some((p) => !p.role));
+const leaked = all.some((c) => c.view.game.players.some((p) => !p.role));
 if (leaked) throw new Error('roles should be revealed at END');
 all.forEach((c) => c.ws.close());
 console.log('PROTOCOL OK');

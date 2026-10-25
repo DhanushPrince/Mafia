@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { renderSVG } from 'uqr';
 import {
-  Dices, Copy, Check, Crown, X, Mic, MicOff, Video, VideoOff, ArrowLeft, Moon, Sun, Vote, Users, Pencil, RotateCcw, Eye,
+  Dices, Copy, Check, Crown, X, Mic, MicOff, Video, VideoOff, ArrowLeft, Moon, Sun, Vote, Users, Pencil, RotateCcw, Eye, LogOut,
 } from 'lucide-react';
 import Card from '../components/Card';
 import { PrimaryButton, LiquidButton } from '../components/ui';
@@ -516,6 +516,7 @@ function useVideo(view, send) {
   const [mediaError, setMediaError] = useState(null);
   const [remotes, setRemotes] = useState({});
   const [prefs, setPrefs] = useState({ cam: true, mic: true });
+  const stopRef = useRef(() => {});
   const joined = Boolean(view?.joined);
   const you = view?.you;
 
@@ -539,7 +540,8 @@ function useVideo(view, send) {
       if (debugHooks()) window.__mesh = mesh;
       setRemotes({});
     })();
-    return () => { cancelled = true; clearInterval(watchdog); mesh?.close(); meshRef.current = null; setLocal(null); };
+    stopRef.current = () => { cancelled = true; clearInterval(watchdog); mesh?.close(); meshRef.current = null; };
+    return () => { stopRef.current(); setLocal(null); };
   }, [joined, you, send]);
 
   const connectedSeats = (view?.members || []).filter((m) => m.connected).map((m) => m.seat).join(',');
@@ -553,7 +555,9 @@ function useVideo(view, send) {
     if (meshRef.current) meshRef.current.onSignal(from, data);
     else pending.current.push([from, data]);
   }, []);
-  return { local, remotes, mediaError, prefs, setPrefs, effective, night, onRtc };
+  /** Hang up now: close every peer connection and stop camera/mic tracks (also a still-pending getUserMedia). */
+  const stop = useCallback(() => { stopRef.current(); setLocal(null); setRemotes({}); }, []);
+  return { local, remotes, mediaError, prefs, setPrefs, effective, night, onRtc, stop };
 }
 
 /** Host device speaks the server's cues and acks them; everyone shows the caption. */
@@ -587,11 +591,81 @@ function useNarration(view, send, names) {
   return caption;
 }
 
+/** Exit icon (top corner of every room screen) + "Leave room?" confirm. */
+function LeaveButton({ inGame, onConfirm }) {
+  const [open, setOpen] = useState(false);
+  const stayRef = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    stayRef.current?.focus();
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
+  return (
+    <>
+      <motion.button
+        type="button"
+        data-testid="leave"
+        aria-label="Leave room"
+        title="Leave room"
+        whileTap={{ scale: 0.92 }}
+        onClick={() => setOpen(true)}
+        className="shrink-0 w-11 h-11 flex items-center justify-center rounded-full bg-white/5 border border-white/10 text-white/70 hover:text-red-200 hover:bg-red-500/15 hover:border-red-400/40 transition-colors"
+      >
+        <LogOut className="w-5 h-5" />
+      </motion.button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            key="leave-confirm"
+            data-testid="leave-confirm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+            onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
+          >
+            <motion.div
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="leave-title"
+              aria-describedby="leave-desc"
+              initial={{ y: 40, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 40, opacity: 0 }}
+              className={`${panel} w-full max-w-sm flex flex-col gap-4 bg-black/70`}
+            >
+              <div className="flex items-center gap-3">
+                <span className="w-11 h-11 shrink-0 rounded-full bg-red-500/15 border border-red-400/30 flex items-center justify-center text-red-200"><LogOut className="w-5 h-5" /></span>
+                <h3 id="leave-title" className="text-xl font-bold text-white">Leave room?</h3>
+              </div>
+              <p id="leave-desc" className="text-sm text-white/70">
+                {inGame
+                  ? "You'll be out of this game: you count as eliminated and can't rejoin it as a player. Your camera and mic turn off."
+                  : 'You can join again later with the room code. Your camera and mic turn off.'}
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <button ref={stayRef} type="button" data-testid="leave-stay" onClick={() => setOpen(false)} className="min-h-11 rounded-lg bg-white/5 border border-white/15 px-4 py-3 font-semibold text-white hover:bg-white/10">
+                  Stay
+                </button>
+                <button type="button" data-testid="leave-confirm-btn" onClick={() => { setOpen(false); onConfirm(); }} className="min-h-11 rounded-lg bg-red-600/80 border border-red-400/40 px-4 py-3 font-bold text-white hover:bg-red-600">
+                  Leave
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
+
 function Room({ code, identity, opts, onLeave, onIdentity }) {
   const [name, setName] = useState(identity.name);
   const videoRef = useRef(null);
   const room = useRoom({ code, gid: identity.gid, name, create: opts.create, fast: opts.fast, onRtc: (f, d) => videoRef.current?.(f, d) });
-  const { view, error, clearError, fatal, online, unreachable, retry, send, serverNow } = room;
+  const { view, error, clearError, fatal, online, unreachable, retry, send, leave, serverNow } = room;
   const v = useVideo(view, send);
   videoRef.current = v.onRtc;
   const names = useMemo(() => Object.fromEntries((view?.members || []).map((m) => [m.seat, m.name])), [view?.members]);
@@ -604,7 +678,14 @@ function Room({ code, identity, opts, onLeave, onIdentity }) {
   const myName = view?.members.find((m) => m.seat === view.you)?.name;
   useEffect(() => { if (myName && myName !== identity.name) onIdentity({ ...identity, name: myName }); }, [myName]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { if (fatal) onLeave(fatal); }, [fatal]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (fatal) onLeave(fatal); }, [fatal]);
+  /** Exit button: tell the server, hang up camera/mic and peers, close the socket for good, go home. */
+  const exitRoom = () => {
+    v.stop();
+    narrator.stop();
+    leave();
+    onLeave(null);
+  }; // eslint-disable-line react-hooks/exhaustive-deps
 
   const joinError = error?.action === 'join' ? error : null;
   if (joinError && !view?.joined) {
@@ -649,7 +730,6 @@ function Room({ code, identity, opts, onLeave, onIdentity }) {
   return (
     <div className="min-h-screen flex flex-col gap-3 p-3 sm:p-5 max-w-5xl mx-auto" data-testid="room" data-status={view.status}>
       <div className="flex items-center gap-2">
-        <button type="button" aria-label="Leave room" data-testid="leave" onClick={() => onLeave(null)} className="text-white/50 hover:text-white"><ArrowLeft /></button>
         <span className="font-mono tracking-[0.25em] font-bold">{view.code}</span>
         {!online && <span className="text-xs text-amber-300">reconnecting…</span>}
         <span className="ml-auto flex items-center gap-2">
@@ -660,6 +740,7 @@ function Room({ code, identity, opts, onLeave, onIdentity }) {
           <button type="button" data-testid="toggle-cam" aria-label={v.prefs.cam ? 'Camera off' : 'Camera on'} disabled={!v.local} onClick={() => v.setPrefs((p) => ({ ...p, cam: !p.cam }))} className="p-2 rounded-full bg-white/5 border border-white/10 disabled:opacity-30">
             {v.effective.cam ? <Video className="w-4 h-4" /> : <VideoOff className="w-4 h-4 text-red-300" />}
           </button>
+          <LeaveButton inGame={view.status !== 'lobby' && !(view.status === 'game' && view.game?.phase === 'END')} onConfirm={exitRoom} />
         </span>
       </div>
       {v.night && <p className="text-center text-xs text-indigo-200/70" data-testid="night-media-note">Night: cameras and mics are off.</p>}

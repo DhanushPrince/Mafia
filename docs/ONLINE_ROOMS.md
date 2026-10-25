@@ -62,11 +62,38 @@ Client -> server (JSON, field `t`):
 | `skipDiscussion` | | host |
 | `cueDone` | `id` | host, after narration |
 | `rematch`, `lobby` | | host, after the game |
+| `leave` | | member; deliberate exit (see below). The server closes that seat's sockets with code 4001 |
 | `rtc` | `to`, `data` | member; relayed, never stored |
 | `ping` | | anyone; answered with `pong` |
 
 Server -> client: `view` (this seat's filtered view), `error` (`action`, `code`, optional `suggestions`,
-`message`), `fatal` (`code`), `rtc` (`from`, `data`), `pong`.
+`message`), `fatal` (`code`), `rtc` (`from`, `data`), `pong`, `left` (sent right before the 4001 close
+after `leave`).
+
+### Leaving a room
+
+The exit icon (top-right of every room screen, `aria-label="Leave room"`) asks "Leave room?" (Leave / Stay;
+during the deal or a game it warns that you will be out of this game). On Leave the client sends `leave`,
+stops camera/mic tracks and closes every peer connection, closes the socket for good (PartySocket does not
+reconnect; close code 4001 from the server also stops it), and goes back to `/online`, so a reload does not
+rejoin. The guest id and name stay in localStorage.
+
+`R.leave(room, seat, now)` on the server, by phase:
+
+| Phase | Effect |
+|-------|--------|
+| lobby | Member removed; the name is free again. They can rejoin later like anyone else. |
+| deal | Member stays listed as an offline spectator (`left: true`). If they had not picked, a free card is assigned to them (the deck must match the dealt seats) and marked seen, so the night can start; when it does, they start out (dead), and the win check runs then. |
+| game | Their engine player is set dead, like an eliminated player. Night picks and votes on them, and their own votes and Mafia picks, are dropped. The win check runs at once (a win jumps to END and its cue). If a vote now has every alive player's vote, it completes. Timed steps keep running, so nothing waits on the leaver. |
+| END / over | Marked as left; the result does not change. |
+
+In every phase a leaving host hands over to the longest-seated connected member (same rule as the host-offline
+grace). If nobody is left, `hostSeat` is null and the next joiner becomes host. Coming back during the same
+deal/game gives a spectator seat (still out). `backToLobby` drops members who left and did not come back;
+`rematch` deals only connected members. Peers lose the video tile because the seat is no longer a connected
+player in the next `view`. The leaver's socket close is a no-op (`disconnect` on an offline member), so
+`leave` costs one storage write, with an alarm write only if the next alarm time changes. An empty room
+expires through the normal idle alarm.
 
 Close codes: `4000` bad guest id, `4003` kicked, `4004` no such room, `4009` room code already taken (the
 client picks a new code).
