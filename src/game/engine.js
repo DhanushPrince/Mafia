@@ -10,6 +10,11 @@
  *   (MAFIA_TURN -> DOCTOR_TURN -> DETECTIVE_TURN) -> MORNING -> CHECK_WIN
  *   -> DAY_DISCUSS -> VOTE -> CHECK_WIN -> NIGHT_INTRO ...;  CHECK_WIN -> END on a win.
  *
+ * Detective catch (house rule): when the Detective's check hits a real Mafia, that Mafia is
+ * caught and dies at the morning resolution. Order: the night kill (minus the Doctor's save),
+ * then the catch, then the win check - so catching the last Mafia always wins for the village,
+ * even when the same night's kill would otherwise have given the Mafia parity.
+ *
  * Night turns are data-driven: every role in ROLE_DEFS with a nightOrder that was
  * dealt this game gets a turn (even when all its players are dead, so nobody learns that).
  */
@@ -70,7 +75,7 @@ export function createInitialState(rules = {}, timers = undefined, lang = undefi
     round: 0, // night/day counter, 1-based once the first night starts
     night: emptyNight(), // selections: { [roleId]: name }, result: detective answer
     lastSave: null, // who the Doctor saved last night (repeat-save rule)
-    morning: null, // { victim, attacked, saved, detectiveFoundMafia }
+    morning: null, // { victim, attacked, saved, detectiveFoundMafia, caught }
     vote: null, // { out, tie } once the village has voted this day
     resumeTo: null, // where CHECK_WIN goes when nobody has won
     winner: null, // 'villagers' | 'mafia'
@@ -85,6 +90,7 @@ const newLogEntry = (round) => ({
   detectiveCheck: null, // { target, isMafia }
   killed: null,
   saved: false,
+  caught: null, // Mafia caught by the Detective this night
   votedOut: null,
   tie: false,
 });
@@ -155,8 +161,9 @@ export const ACTIONS = {
     resolve: (ctx, { state, target }) => {
       ctx.log.detectiveCheck =
         target && state.night.result !== null ? { target, isMafia: state.night.result } : null;
-      // announced at morning (no name): only a real (alive) Detective who checked an actual Mafia
+      // only a real (alive at dusk) Detective who checked an actual Mafia: that Mafia is caught
       ctx.detectiveFoundMafia = Boolean(target) && state.night.result === true;
+      if (ctx.detectiveFoundMafia) ctx.catches.push(target);
     },
   },
 };
@@ -182,13 +189,21 @@ export const selectDetectiveResult = (state) => state.night.result;
  */
 const sayName = (opts, name) => Boolean(name && opts && typeof opts.canSayName === 'function' && opts.canSayName(name));
 
-/** Morning summary: Mafia/Doctor outcome, then (only if true) the Detective found a Mafia - never a name for that. */
+/**
+ * Morning summary: Mafia/Doctor outcome, then (only on a correct check) the Detective's catch:
+ * "The Detective found one of the Mafia last night. <name> has been eliminated." Nothing is said
+ * about a wrong check. Without a speakable name only the first sentence is said (the screen names them).
+ */
 export function morningClips(morning, opts = {}) {
   const victim = morning?.victim;
+  const caught = morning?.caught;
   let outcome;
   if (victim) outcome = sayName(opts, victim) ? ['killed_pre', { name: victim }, 'killed_post'] : ['killed'];
   else outcome = ['saved'];
-  return ['morning', ...outcome, ...(morning?.detectiveFoundMafia ? ['detective_found'] : [])];
+  let detective = [];
+  if (caught && sayName(opts, caught)) detective = ['detective_found', { name: caught }, 'voted_out_post'];
+  else if (caught || morning?.detectiveFoundMafia) detective = ['detective_found'];
+  return ['morning', ...outcome, ...detective];
 }
 
 /** Vote outcome narration (array), or null before the vote. */
@@ -257,9 +272,13 @@ function startNight(state) {
   };
 }
 
-/** Run every turn's action resolver, then apply deaths (attacked and not protected). */
+/**
+ * Run every turn's action resolver, then apply deaths: first the night kill (attacked and not
+ * protected), then the Detective's catch (the Doctor's save does not stop a catch). The win
+ * check comes after, in CHECK_WIN.
+ */
 function resolveNight(state) {
-  const ctx = { attacks: [], protects: [], lastSave: null, detectiveFoundMafia: false, log: {} };
+  const ctx = { attacks: [], protects: [], catches: [], lastSave: null, detectiveFoundMafia: false, log: {} };
   state.nightOrder.forEach((roleId) => {
     const def = defFor(roleId);
     const action = def && ACTIONS[def.action];
@@ -270,13 +289,16 @@ function resolveNight(state) {
   const victim = deaths[0] || null;
   const attacked = ctx.attacks.length > 0;
   const saved = attacked && deaths.length === 0;
+  const afterKill = deaths.reduce((players, name) => killPlayer(players, name), state.players);
+  // a catch needs a living Mafia after the kill (Mafia never target Mafia; guard anyway)
+  const caught = ctx.catches.find((t) => isMafia(state, t) && afterKill.some((p) => p.name === t && p.alive)) || null;
   return {
     ...state,
     phase: PHASES.MORNING,
-    players: deaths.reduce(killPlayer, state.players),
-    morning: { victim, attacked, saved, detectiveFoundMafia: ctx.detectiveFoundMafia },
+    players: caught ? killPlayer(afterKill, caught) : afterKill,
+    morning: { victim, attacked, saved, detectiveFoundMafia: ctx.detectiveFoundMafia, caught },
     lastSave: ctx.lastSave,
-    log: updateLog(state, state.round, { ...ctx.log, killed: victim, saved }),
+    log: updateLog(state, state.round, { ...ctx.log, killed: victim, saved, caught }),
   };
 }
 

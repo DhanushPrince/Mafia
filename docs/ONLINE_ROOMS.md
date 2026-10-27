@@ -40,6 +40,11 @@ flowchart LR
 4. Night: server walks Mafia, Doctor, Detective turns on alarms; cameras and mics turn off.
 5. Morning, discussion, open vote on phones, win check; results; rematch or back to lobby.
 
+Detective catch (ADR 0013): a correct Detective check eliminates that Mafia at morning, after the night kill
+(the Doctor's save does not protect them), and the morning names them. Then the win check: catching the last
+Mafia ends the game at once (village wins, no discussion or vote); otherwise the game goes on. A wrong guess
+is not announced.
+
 ## Protocol
 
 WebSocket URL: `/parties/room/<CODE>?gid=<guest id>&name=<name>[&create=1][&fast=1]`.

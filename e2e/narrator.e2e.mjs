@@ -106,6 +106,8 @@ try {
   // --- setup: count + mode + voice ---
   const countText = async () => (await page.getByTestId('player-count').textContent()).trim();
   await tap(page.getByRole('radio', { name: /App is Game Master/ }));
+  // Tamil is the default narrator language; this run checks the English (George/Heart) clips
+  await tap(page.getByTestId('narrator-language').getByRole('radio', { name: 'English' }));
   ok((await page.getByRole('radio', { name: /^George/ }).getAttribute('aria-checked')) === 'true', 'George is the default voice');
   await tap(page.getByRole('radio', { name: /^Heart/ }));
   await page.reload();
@@ -202,14 +204,14 @@ try {
   await turn('detective').waitFor({ timeout: 15000 });
   const detTargets = await page.locator('[data-testid="night-turn"] li button').allInnerTexts();
   ok(!detTargets.includes(detective) && detTargets.length === 3, 'detective list excludes the detective');
-  await tap(page.getByRole('button', { name: mafia, exact: true }));
+  // night 1: a wrong guess (the Doctor) - nothing happens at morning; night 2 catches the Mafia
+  await tap(page.getByRole('button', { name: doctor, exact: true }));
   await page.getByTestId('detective-result').waitFor({ timeout: 3000 });
-  ok((await page.getByTestId('detective-result').getAttribute('data-mafia')) === 'true', 'detective result: MAFIA (thumbs up)');
-  ok(await page.getByText('MAFIA', { exact: true }).isVisible(), 'MAFIA text shown');
+  ok((await page.getByTestId('detective-result').getAttribute('data-mafia')) === 'false', 'detective result: NOT Mafia (thumbs down)');
   await page.waitForTimeout(400);
   await shot('05-detective-result');
   ok(await turn('detective').isVisible(), 'detective turn still running while result is shown');
-  ok((await page.getByTestId('detective-result-name').innerText()).includes(mafia), 'investigated name shown above the verdict');
+  ok((await page.getByTestId('detective-result-name').innerText()).includes(doctor), 'investigated name shown above the verdict');
   {
     // the result stays up for the rest of the window (no early hide), then clears at the 'sleep' stage
     const t0 = Date.now();
@@ -236,8 +238,7 @@ try {
   ok((await page.locator(`[data-player="${villager}"]`).getAttribute('data-dead')) === 'true', 'victim card greyed / face down');
   await page.waitForFunction(() => document.querySelector('[data-testid="narrator-caption"]')?.innerText.includes('Someone did not survive'), null, { timeout: 8000 });
   ok(true, 'caption shows the "killed" line');
-  ok(await page.getByTestId('morning-detective-found').isVisible(), 'morning screen: "The Detective found a Mafia" (correct guess)');
-  ok(!(await page.getByTestId('morning-detective-found').innerText()).includes(mafia), 'morning detective line does not name the Mafia');
+  ok((await page.getByTestId('morning-detective-found').count()) === 0 && (await page.getByTestId('morning-detective-caught').count()) === 0, 'wrong guess: nothing about the Detective at morning');
   await page.waitForTimeout(300);
   await shot('06-morning-victim');
 
@@ -246,11 +247,12 @@ try {
   ok((await page.evaluate(() => JSON.parse(localStorage.getItem('mafia-dealer:settings')).muted)) === true, 'mute persisted');
   await tap(page.getByRole('button', { name: 'Unmute narrator' }));
 
-  const expected = ['pass_hint', 'night_start', 'mafia_wake', 'mafia_sleep', 'doctor_wake', 'doctor_sleep', 'detective_wake', 'detective_result', 'detective_sleep', 'morning', 'killed', 'detective_found'];
+  const expected = ['pass_hint', 'night_start', 'mafia_wake', 'mafia_sleep', 'doctor_wake', 'doctor_sleep', 'detective_wake', 'detective_result', 'detective_sleep', 'morning', 'killed'];
   await waitPlayed(expected);
   const missing = expected.filter((id) => !media.includes(`/audio/george/${id}.mp3`));
   ok(missing.length === 0, `audio element requested george clips for night 1${missing.length ? ' (missing: ' + missing.join(',') + ')' : ''}`);
   ok(!media.includes('/audio/george/saved.mp3'), 'no "saved" clip played when someone died');
+  ok(!media.includes('/audio/george/detective_found.mp3'), 'no detective_found clip after a wrong guess');
   ok(!media.some((p) => p.startsWith('/audio/heart/')), 'no Heart clips played with George selected');
 
   // --- day ---
@@ -275,26 +277,45 @@ try {
   await page.getByRole('button', { name: /Tie \/ no elimination/ }).waitFor();
   const voteNames = await page.locator('ul li button').allInnerTexts();
   ok(voteNames.length === 3 && !voteNames.includes(villager), `vote lists 3 alive players: ${voteNames.join(',')}`);
-  await tap(page.getByRole('button', { name: mafia, exact: true }));
   await page.waitForTimeout(300);
   await shot('08-vote');
-  await tap(page.getByRole('button', { name: `Eliminate ${mafia}` }));
+  await tap(page.getByRole('button', { name: /Tie \/ no elimination/ }));
   await page.getByTestId('vote-result').waitFor();
-  ok((await page.getByTestId('vote-result').innerText()).includes(mafia), 'vote result shows the voted-out player');
+  ok((await page.getByTestId('vote-result').innerText()).includes('Tie'), 'vote result shows the tie');
   await page.waitForTimeout(400);
   await tap(page.getByRole('button', { name: 'Continue', exact: true }));
 
-  // --- end ---
+  // --- night 2: the Mafia kill the Doctor, the Detective catches the Mafia ---
+  // kill then catch then win check: 1 Mafia vs 1 would be a Mafia win, but the catch leaves 0 Mafia
+  await turn('mafia').waitFor({ timeout: 15000 });
+  await tap(page.getByRole('button', { name: doctor, exact: true }));
+  await turn('doctor').waitFor({ timeout: 15000 });
+  await tap(page.getByRole('button', { name: mafia, exact: true })); // the Doctor's save never blocks a catch
+  await turn('detective').waitFor({ timeout: 15000 });
+  await tap(page.getByRole('button', { name: mafia, exact: true }));
+  await page.getByTestId('detective-result').waitFor({ timeout: 3000 });
+  ok((await page.getByTestId('detective-result').getAttribute('data-mafia')) === 'true', 'detective result: MAFIA (thumbs up)');
+  ok(await page.getByText('MAFIA', { exact: true }).isVisible(), 'MAFIA text shown');
+  await page.getByTestId('morning-caught').waitFor({ timeout: 15000 });
+  ok((await page.getByTestId('morning-victim').innerText()).trim() === doctor, `morning 2 shows victim ${doctor}`);
+  ok((await page.getByTestId('morning-caught').innerText()).trim() === mafia, `morning 2: the Detective caught ${mafia}`);
+  ok((await page.locator(`[data-player="${mafia}"]`).getAttribute('data-dead')) === 'true', 'caught Mafia tile marked dead');
+  await waitPlayed(['detective_found']);
+  ok(media.includes('/audio/george/detective_found.mp3'), 'detective_found clip played for the catch');
+  await shot('08b-morning-caught');
+  await tap(page.getByRole('button', { name: 'See who won' }));
+
+  // --- end (straight from the morning: no discussion, no vote) ---
   await page.getByTestId('winner').waitFor({ timeout: 5000 });
   ok((await page.getByTestId('winner').getAttribute('data-winner')) === 'villagers', 'Villagers win');
   const log = await page.getByTestId('game-log').innerText();
-  ok(log.includes(`Mafia killed ${villager}`) && log.includes(`Village voted out ${mafia}`) && log.includes(`Detective checked ${mafia}: Mafia`) && log.includes(`Doctor protected ${detective}`), 'log lists kill, save, check and vote');
+  ok(log.includes(`Mafia killed ${villager}`) && log.includes(`Mafia killed ${doctor}`) && log.includes('Vote tied') && log.includes(`Detective checked ${doctor}: not Mafia`) && log.includes(`Detective checked ${mafia}: Mafia - caught and out`) && log.includes(`Doctor protected ${detective}`), 'log lists kills, save, checks, catch and tie');
   const reveal = await page.getByTestId('role-reveal').innerText();
   ok(names4.every((n) => reveal.includes(n)) && /MAFIA/i.test(reveal) && /DOCTOR/i.test(reveal), 'full role reveal');
   await page.waitForFunction(() => document.querySelector('[data-testid="narrator-caption"]')?.innerText.includes('villagers win'), null, { timeout: 8000 });
-  await waitPlayed(['discuss', 'vote', 'voted_out', 'villagers_win']);
-  for (const id of ['discuss', 'vote', 'voted_out', 'villagers_win']) ok(media.includes(`/audio/george/${id}.mp3`), `played ${id}.mp3`);
-  ok(!media.includes('/audio/george/mafia_win.mp3') && !media.includes('/audio/george/tie.mp3'), 'did not play mafia_win / tie');
+  await waitPlayed(['discuss', 'vote', 'tie', 'villagers_win']);
+  for (const id of ['discuss', 'vote', 'tie', 'villagers_win']) ok(media.includes(`/audio/george/${id}.mp3`), `played ${id}.mp3`);
+  ok(!media.includes('/audio/george/mafia_win.mp3') && !media.includes('/audio/george/voted_out.mp3'), 'did not play mafia_win / voted_out');
   await page.waitForTimeout(500);
   await shot('09-win-screen-log', true);
   ok((await page.evaluate(() => localStorage.getItem('mafia-dealer:narrator-game'))) === null, 'saved game cleared at END');

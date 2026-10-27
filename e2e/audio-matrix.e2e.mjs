@@ -186,7 +186,8 @@ async function game(browser, ctxOpts, n, voice) {
       // ---- DETECTIVE ----
       await turn('detective').waitFor({ timeout: 60000 });
       const detAlive = roleAlive('detective');
-      const check = round % 2 ? mafiaAlive()[0] : othersAlive().find((x) => x !== detective);
+      // a correct check catches that Mafia (house rule), so only the villagers plan checks the Mafia
+      const check = plan === 'villagers' && round % 2 ? mafiaAlive()[0] : othersAlive().find((x) => x !== detective);
       if (check) await tapName(check);
       if (detAlive && check) {
         const shown = await page.getByTestId('detective-result').waitFor({ timeout: 4000 }).then(() => true, () => false);
@@ -203,9 +204,15 @@ async function game(browser, ctxOpts, n, voice) {
       expected.push('morning');
       if (victim) { expected.push(...(spoken ? ['killed_pre', { name: victim }, 'killed_post'] : ['killed'])); coverage.killed++; if (spoken) coverage.nameRounds.push(`R${round} died ${victim}`); alive.delete(victim); }
       else { expected.push('saved'); coverage.saved++; }
-      if (found) { expected.push('detective_found'); coverage.detectiveFound++; } else if (detAlive && check) coverage.detectiveNotFound++;
+      // kill, then the catch (named when the name can be spoken), then the win check
+      if (found && alive.has(check)) {
+        expected.push(...(spoken ? ['detective_found', { name: check }, 'voted_out_post'] : ['detective_found']));
+        coverage.detectiveFound++;
+        if (spoken) coverage.nameRounds.push(`R${round} caught ${check}`);
+        alive.delete(check);
+      } else if (found) { expected.push('detective_found'); coverage.detectiveFound++; } else if (detAlive && check) coverage.detectiveNotFound++;
       if (!(await waitAudioIdle(page))) issues.push(`R${round} morning narration did not finish`);
-      await tap(page.getByRole('button', { name: 'Continue to discussion' }));
+      await tap(page.getByRole('button', { name: winner() ? 'See who won' : 'Continue to discussion' }));
       if (winner()) { expected.push(endClip()); await page.getByTestId('winner').waitFor({ timeout: 15000 }); break; }
       // ---- DAY ----
       await page.getByTestId('discuss-timer').waitFor({ timeout: 15000 });

@@ -6,7 +6,7 @@ import {
 import { ROLES } from '../game/roleVisuals';
 import {
   PHASES, isTurnPhase, currentTurnRole, selectTargets, selectCurrentSelection, selectDetectiveResult,
-  entryClips, exitClips, voteClips, alivePlayers,
+  entryClips, exitClips, voteClips, alivePlayers, selectWinner,
 } from '../game/engine';
 import { narrator } from '../audio/narrator';
 import { nameVoice, canSpeakName } from '../audio/nameVoice';
@@ -217,7 +217,8 @@ const Panel = ({ children, className = '' }) => (
 );
 
 function Morning({ state, dispatch }) {
-  const { victim, saved, detectiveFoundMafia } = state.morning || {};
+  const { victim, saved, detectiveFoundMafia, caught } = state.morning || {};
+  const gameOver = Boolean(selectWinner(state)); // e.g. the Detective caught the last Mafia
   return (
     <div className="min-h-screen flex flex-col items-center px-4 pt-20 pb-28">
       <div className="w-full max-w-md flex flex-col items-center gap-5">
@@ -238,14 +239,22 @@ function Morning({ state, dispatch }) {
               </>
             )}
           </div>
-          {detectiveFoundMafia && (
+          {caught ? (
+            <div data-testid="morning-detective-caught" className="mt-4 pt-4 border-t border-white/10 text-center">
+              <div className="flex items-center justify-center gap-2 text-amber-200/90 text-base font-medium">
+                <Search size={18} className="text-amber-300/80" /> The Detective caught a Mafia
+              </div>
+              <div data-testid="morning-caught" className="text-2xl font-bold text-amber-200 mt-1">{caught}</div>
+              <div className="text-white/50 text-sm">is out of the game.</div>
+            </div>
+          ) : detectiveFoundMafia && (
             <div data-testid="morning-detective-found" className="mt-4 pt-4 border-t border-white/10 flex items-center justify-center gap-2 text-amber-200/90 text-base font-medium">
               <Search size={18} className="text-amber-300/80" /> The Detective found a Mafia
             </div>
           )}
         </Panel>
         <PlayerTiles players={state.players} highlight={victim} />
-        <PrimaryButton type="button" onClick={() => dispatch({ type: 'ADVANCE', from: state.phase })}>Continue to discussion</PrimaryButton>
+        <PrimaryButton type="button" onClick={() => dispatch({ type: 'ADVANCE', from: state.phase })}>{gameOver ? 'See who won' : 'Continue to discussion'}</PrimaryButton>
       </div>
     </div>
   );
@@ -376,7 +385,7 @@ function EndScreen({ state, onRestart }) {
                 </div>
                 {e.doctorSave && !e.saved && <div className="flex items-center gap-2"><ShieldCheck size={14} className="text-white/40" /> Doctor protected {e.doctorSave}</div>}
                 {e.detectiveCheck && (
-                  <div className="flex items-center gap-2"><Search size={14} className="text-white/40" /> Detective checked {e.detectiveCheck.target}: {e.detectiveCheck.isMafia ? 'Mafia' : 'not Mafia'}</div>
+                  <div className="flex items-center gap-2"><Search size={14} className="text-white/40" /> Detective checked {e.detectiveCheck.target}: {e.detectiveCheck.isMafia ? 'Mafia' : 'not Mafia'}{e.caught ? ' - caught and out' : ''}</div>
                 )}
                 {(e.votedOut || e.tie) && (
                   <div className="flex items-center gap-2"><Vote size={14} className="text-white/40" /> {e.tie ? 'Vote tied, no elimination' : <span>Village voted out <b>{e.votedOut}</b></span>}</div>

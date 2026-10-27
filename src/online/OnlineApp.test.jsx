@@ -489,6 +489,22 @@ describe('game', () => {
     expect(sent()).toContainEqual({ t: 'skipDiscussion' });
   });
 
+  it('morning names the Mafia the Detective caught; a wrong guess shows nothing', async () => {
+    await renderAt('/r/KQTZ', gameView({ morning: { victim: 's3', caught: 's2' } }, { step: 'morning', deadline: null }));
+    expect(screen.getByTestId('morning-caught').textContent).toBe('The Detective caught Priya — Mafia, out of the game.');
+    act(() => room.set({ view: gameView({ morning: { victim: 's3', caught: null } }, { step: 'morningRead', deadline: null }) }));
+    expect(screen.queryByTestId('morning-caught')).toBeNull();
+  });
+
+  it('game over straight from the morning says the Detective caught the last Mafia', async () => {
+    await renderAt('/r/KQTZ', gameView({ phase: 'END', winner: 'villagers', morning: { victim: null, caught: 's2' }, vote: null }, { step: 'end', deadline: null }));
+    expect(screen.getByTestId('winner').textContent).toBe('The village wins');
+    expect(screen.getByTestId('end-caught').textContent).toBe('The Detective caught Priya.');
+    // a game that ended on a vote does not repeat an older morning's catch
+    act(() => room.set({ view: gameView({ phase: 'END', winner: 'villagers', morning: { victim: null, caught: 's2' }, vote: { out: 's4', tie: false } }, { step: 'end', deadline: null }) }));
+    expect(screen.queryByTestId('end-caught')).toBeNull();
+  });
+
   it('voting: open votes, vote and skip; you cannot vote for yourself', async () => {
     await renderAt('/r/KQTZ', gameView({ phase: 'VOTE', votes: { s2: 's3', s3: 'skip' } }, { step: 'voting', deadline: Date.now() + 60_000 }));
     const targets = screen.getAllByTestId('vote-target');

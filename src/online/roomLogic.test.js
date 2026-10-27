@@ -12,7 +12,7 @@ const seeded = (seed = 1) => () => {
   return (seed - 1) / 2147483646;
 };
 
-const NAMES = ['Arjun', 'Priya', 'Karthik', 'Meena', 'Ravi'];
+const NAMES = ['Arjun', 'Priya', 'Karthik', 'Meena', 'Ravi', 'Divya', 'Suresh'];
 let T = 1_000_000;
 const now = () => (T += 10);
 
@@ -233,6 +233,105 @@ describe('votes', () => {
     expect(room.flow.step).toBe('voteResult');
     expect(room.game.vote).toEqual({ out: target, tie: false });
     expect(room.game.players.find((p) => p.name === target).alive).toBe(false);
+  });
+});
+
+describe('detective catch (online)', () => {
+  const TURNS = [['mafia', 'kill', PHASES.MAFIA_TURN], ['doctor', 'save', PHASES.DOCTOR_TURN], ['detective', 'check', PHASES.DETECTIVE_TURN]];
+  const aliveSeat = (room, role) => room.game.players.find((p) => p.role === role && p.alive)?.name;
+  const isAlive = (room, seat) => room.game.players.find((p) => p.name === seat).alive;
+  /** Play one night from wherever the room is, tapping as each role; stop at the morning narration. */
+  function night(room, taps) {
+    let r = room;
+    for (const [role, key, phase] of TURNS) {
+      r = runUntil(r, (x) => x.game.phase === phase && x.flow.step === 'open');
+      const seat = aliveSeat(r, role);
+      if (taps[key] && seat) {
+        const res = nightSelect(r, seat, taps[key], now());
+        expect(res.error).toBeUndefined();
+        r = res.room;
+      }
+    }
+    return runUntil(r, (x) => x.flow.step === 'morning');
+  }
+  /** Run on alarms until END or the predicate, recording every phase seen on the way. */
+  function phasesUntil(room, pred) {
+    const seen = new Set();
+    const r = runUntil(room, (x) => { seen.add(x.game.phase); return pred(x); });
+    return { room: r, seen };
+  }
+
+  it('catching the only Mafia: caught and named at morning, then straight to END with a village win', () => {
+    let room = inGame(5);
+    const [mafia] = seatsWith(room, 'mafia');
+    const villager = seatsWith(room, 'villager')[0];
+    room = night(room, { kill: villager, check: mafia });
+    expect(room.game.morning).toMatchObject({ victim: villager, caught: mafia });
+    expect(isAlive(room, mafia)).toBe(false);
+    expect(room.flow.cue.clips).toEqual(['morning', 'killed_pre', { name: villager }, 'killed_post', 'detective_found', { name: mafia }, 'voted_out_post']);
+    // every seat sees the catch on the morning screen
+    room.game.players.forEach(({ name }) => expect(viewFor(room, name).game.morning.caught).toBe(mafia));
+    const { room: end, seen } = phasesUntil(room, (x) => x.game.phase === PHASES.END);
+    expect(end.game.winner).toBe('villagers');
+    expect(seen.has(PHASES.DAY_DISCUSS) || seen.has(PHASES.VOTE)).toBe(false);
+    expect(end.flow.step).toBe('end');
+    expect(end.flow.cue.clips).toEqual(['villagers_win']);
+    const v = viewFor(end, villager);
+    expect(v.game.morning.caught).toBe(mafia);
+    expect(v.game.vote).toBeNull();
+    expect(v.game.log[0]).toMatchObject({ caught: mafia, detectiveCheck: { target: mafia, isMafia: true } });
+  });
+
+  it('catching one of two Mafia: the caught seat is dead and out of play, the game goes on to the day', () => {
+    let room = inGame(7);
+    const [m1, m2] = seatsWith(room, 'mafia');
+    const [v1] = seatsWith(room, 'villager');
+    room = night(room, { kill: v1, check: m2 });
+    expect(room.game.morning).toMatchObject({ victim: v1, caught: m2 });
+    room = runUntil(room, (x) => x.game.phase === PHASES.VOTE && x.flow.step === 'voting');
+    expect(room.game.phase).toBe(PHASES.VOTE);
+    expect(castVote(room, m2, m1, now()).error?.code).toBe('not_voter');
+    expect(castVote(room, m1, m2, now()).error?.code).toBe('bad_target');
+    // next night the caught Mafia cannot act; the other one still can
+    room = runUntil(room, (x) => x.game.phase === PHASES.MAFIA_TURN && x.flow.step === 'open');
+    expect(nightSelect(room, m2, seatsWith(room, 'doctor')[0], now()).error?.code).toBe('not_your_turn');
+    expect(viewFor(room, m2).game.myTurn).toBe(false);
+    expect(nightSelect(room, m1, seatsWith(room, 'doctor')[0], now()).error).toBeUndefined();
+  });
+
+  it('a wrong guess changes nothing and the narrator says nothing about the Detective', () => {
+    let room = inGame(5);
+    const villagers = seatsWith(room, 'villager');
+    room = night(room, { kill: villagers[0], check: villagers[1] });
+    expect(room.game.morning).toMatchObject({ victim: villagers[0], caught: null, detectiveFoundMafia: false });
+    expect(room.flow.cue.clips).toEqual(['morning', 'killed_pre', { name: villagers[0] }, 'killed_post']);
+    expect(runUntil(room, (x) => x.flow.step === 'discussCue').game.phase).toBe(PHASES.DAY_DISCUSS);
+  });
+
+  it('doctor save + catch: nobody killed, the Mafia is still caught (the save never blocks a catch)', () => {
+    let room = inGame(7);
+    const [m1] = seatsWith(room, 'mafia');
+    const [v1] = seatsWith(room, 'villager');
+    room = night(room, { kill: v1, save: v1, check: m1 });
+    expect(room.game.morning).toMatchObject({ victim: null, saved: true, caught: m1 });
+    expect(room.flow.cue.clips).toEqual(['morning', 'saved', 'detective_found', { name: m1 }, 'voted_out_post']);
+    expect(isAlive(room, v1)).toBe(true);
+    expect(isAlive(room, m1)).toBe(false);
+  });
+
+  it('kill then catch then win check: the kill reaching parity does not beat catching the last Mafia', () => {
+    // 4 players: night 1 leaves Mafia vs Doctor + Detective; night 2 the kill alone would be a Mafia win (1 vs 1)
+    let room = inGame(4);
+    const [mafia] = seatsWith(room, 'mafia');
+    const [doctor] = seatsWith(room, 'doctor');
+    const [villager] = seatsWith(room, 'villager');
+    room = night(room, { kill: villager, check: doctor });
+    expect(room.game.morning.caught).toBeNull();
+    room = runUntil(room, (x) => x.game.phase === PHASES.NIGHT_INTRO); // nobody votes: tie
+    room = night(room, { kill: doctor, check: mafia });
+    expect(room.game.morning).toMatchObject({ victim: doctor, caught: mafia });
+    const end = runUntil(room, (x) => x.game.phase === PHASES.END);
+    expect(end.game.winner).toBe('villagers');
   });
 });
 

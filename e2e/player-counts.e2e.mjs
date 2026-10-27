@@ -310,7 +310,8 @@ async function narratorRun(n) {
       const expDet = [...alive].filter((x) => x !== detective);
       if (!sameSet(tList, expDet)) { allChecks.detList = false; ok(false, `R${round} detective list ${tList.join(',')} != ${expDet.join(',')}`); }
       const detAlive = roleAlive('detective');
-      const check = round % 2 ? mafiaAlive()[0] : othersAlive().find((x) => x !== detective);
+      // a correct check catches that Mafia (house rule), so only the villagers plan checks the Mafia
+      const check = plan === 'villagers' && round % 2 ? mafiaAlive()[0] : othersAlive().find((x) => x !== detective);
       if (check) {
         await tap(page.getByRole('button', { name: check, exact: true }));
         if (detAlive) {
@@ -327,11 +328,17 @@ async function narratorRun(n) {
       const expVictim = target !== effSave ? target : null;
       const mv = (await page.getByTestId('morning-victim').innerText()).trim();
       if ((expVictim || 'No one died') !== mv) { allChecks.victim = false; ok(false, `R${round} morning victim "${mv}", expected "${expVictim || 'No one died'}"`); }
-      const foundShown = (await page.getByTestId('morning-detective-found').count()) > 0;
-      if (foundShown !== Boolean(detAlive && check && isM(check))) ok(false, `R${round} morning detective line shown=${foundShown}`);
       if (expVictim) {
         alive.delete(expVictim);
         if ((await page.locator(`[data-player="${expVictim}"]`).getAttribute('data-dead')) !== 'true') ok(false, `R${round} victim tile not marked dead`);
+      }
+      // kill, then the Detective's catch, then the win check
+      const expCaught = detAlive && check && isM(check) && alive.has(check) ? check : null;
+      const caughtShown = (await page.getByTestId('morning-caught').count()) > 0 ? (await page.getByTestId('morning-caught').innerText()).trim() : null;
+      if (caughtShown !== expCaught) ok(false, `R${round} morning caught "${caughtShown}", expected "${expCaught}"`);
+      if (expCaught) {
+        alive.delete(expCaught);
+        if ((await page.locator(`[data-player="${expCaught}"]`).getAttribute('data-dead')) !== 'true') ok(false, `R${round} caught tile not marked dead`);
       }
       if (n === 20 && round === 1) {
         await page.waitForTimeout(400);
@@ -340,7 +347,7 @@ async function narratorRun(n) {
         if (shoot) await page.screenshot({ path: `${SHOTS}/20p-04c-morning.png`, fullPage: true });
       }
       if (round === 1 && !expVictim) ok(await page.waitClip('saved'), 'saved clip played when the Doctor blocked the kill');
-      await tap(page.getByRole('button', { name: 'Continue to discussion' }));
+      await tap(page.getByRole('button', { name: winner() ? 'See who won' : 'Continue to discussion' }));
       if (winner()) {
         await page.getByTestId('winner').waitFor({ timeout: 8000 });
         break;
