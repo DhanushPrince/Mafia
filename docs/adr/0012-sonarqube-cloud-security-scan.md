@@ -19,9 +19,10 @@ Add a GitHub Actions workflow (`security-scan.yml`) with two jobs:
   SonarQube Cloud's Automatic Analysis so coverage is included and the analysis runs with the same Node/npm setup
   as the tests; Automatic Analysis must be turned off.
 - **npm audit** (`--audit-level=high`) for known-vulnerable dependencies, runtime deps first, then everything.
-  It is **non-blocking** (`continue-on-error`) for now because the current lockfile already has high advisories
-  (vite, rollup, postcss, nanoid, sharp, source-map-js), so a blocking job would be red on day one and
-  train people to ignore it. Once `npm audit fix` / upgrades land, remove `continue-on-error` to make it blocking.
+  It started **non-blocking** (`continue-on-error`) because the lockfile had high advisories (vite, rollup,
+  postcss, nanoid, sharp, source-map-js). Those are now fixed (`npm audit fix`, plus `overrides` in package.json
+  forcing patched `sharp` ^0.35.5 under kokoro-js -> @huggingface/transformers, and `undici` ^7.30.1 under
+  miniflare), so the job is **blocking**: any new high advisory fails it.
 
 ## Consequences
 

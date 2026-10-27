@@ -41,9 +41,8 @@ jobs:
   npm-audit:
     name: npm audit (high+, report only)
     runs-on: ubuntu-latest
-    # Non-blocking for now: the lockfile already has known high advisories (vite, rollup, postcss, sharp...).
-    # Make it blocking (drop continue-on-error) once `npm audit --audit-level=high` is clean. See ADR 0012.
-    continue-on-error: true
+    # Blocking: `npm audit --audit-level=high` is clean (package.json overrides pin patched sharp and
+    # miniflare's undici). Any new high advisory fails this job. See ADR 0012.
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
