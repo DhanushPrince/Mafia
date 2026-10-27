@@ -217,7 +217,7 @@ const Panel = ({ children, className = '' }) => (
 );
 
 function Morning({ state, dispatch }) {
-  const { victim, saved, detectiveFoundMafia, caught } = state.morning || {};
+  const { victim, saved } = state.morning || {};
   const gameOver = Boolean(selectWinner(state)); // e.g. the Detective caught the last Mafia
   return (
     <div className="min-h-screen flex flex-col items-center px-4 pt-20 pb-28">
@@ -239,19 +239,7 @@ function Morning({ state, dispatch }) {
               </>
             )}
           </div>
-          {caught ? (
-            <div data-testid="morning-detective-caught" className="mt-4 pt-4 border-t border-white/10 text-center">
-              <div className="flex items-center justify-center gap-2 text-amber-200/90 text-base font-medium">
-                <Search size={18} className="text-amber-300/80" /> The Detective caught a Mafia
-              </div>
-              <div data-testid="morning-caught" className="text-2xl font-bold text-amber-200 mt-1">{caught}</div>
-              <div className="text-white/50 text-sm">is out of the game.</div>
-            </div>
-          ) : detectiveFoundMafia && (
-            <div data-testid="morning-detective-found" className="mt-4 pt-4 border-t border-white/10 flex items-center justify-center gap-2 text-amber-200/90 text-base font-medium">
-              <Search size={18} className="text-amber-300/80" /> The Detective found a Mafia
-            </div>
-          )}
+          {/* the Detective's catch (or find) is announced by the narrator's voice only (ADR 0013): no text here */}
         </Panel>
         <PlayerTiles players={state.players} highlight={victim} />
         <PrimaryButton type="button" onClick={() => dispatch({ type: 'ADVANCE', from: state.phase })}>{gameOver ? 'See who won' : 'Continue to discussion'}</PrimaryButton>

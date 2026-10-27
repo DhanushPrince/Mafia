@@ -296,12 +296,14 @@ try {
   await page.getByTestId('detective-result').waitFor({ timeout: 3000 });
   ok((await page.getByTestId('detective-result').getAttribute('data-mafia')) === 'true', 'detective result: MAFIA (thumbs up)');
   ok(await page.getByText('MAFIA', { exact: true }).isVisible(), 'MAFIA text shown');
-  await page.getByTestId('morning-caught').waitFor({ timeout: 15000 });
+  await page.getByTestId('morning-result').waitFor({ timeout: 15000 });
   ok((await page.getByTestId('morning-victim').innerText()).trim() === doctor, `morning 2 shows victim ${doctor}`);
-  ok((await page.getByTestId('morning-caught').innerText()).trim() === mafia, `morning 2: the Detective caught ${mafia}`);
+  // ADR 0013: the catch is voice-only; no morning text or caption names the caught Mafia
+  ok((await page.getByTestId('morning-caught').count()) === 0 && !(await page.getByTestId('morning-result').locator('..').innerText()).includes(mafia), `morning 2: no text names the caught ${mafia}`);
   ok((await page.locator(`[data-player="${mafia}"]`).getAttribute('data-dead')) === 'true', 'caught Mafia tile marked dead');
   await waitPlayed(['detective_found']);
   ok(media.includes('/audio/george/detective_found.mp3'), 'detective_found clip played for the catch');
+  ok(!(await page.getByTestId('narrator-caption').innerText()).includes('Detective'), 'caption does not show the catch line');
   await shot('08b-morning-caught');
   await tap(page.getByRole('button', { name: 'See who won' }));
 

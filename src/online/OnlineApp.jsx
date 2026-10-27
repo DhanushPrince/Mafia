@@ -7,7 +7,7 @@ import {
 import Card from '../components/Card';
 import { PrimaryButton, LiquidButton } from '../components/ui';
 import { ROLES } from '../game/roleVisuals';
-import { narrator, narratorVoice, linesFor, voicesFor, LANGS } from '../audio/narrator';
+import { narrator, narratorVoice, linesFor, voicesFor, LANGS, captionedItems } from '../audio/narrator';
 import { nameVoice } from '../audio/nameVoice';
 import { unlockAmbient } from '../audio/ambient';
 import { TURN_OPTIONS_SEC, DISCUSS_OPTIONS_MIN } from '../game/timing';
@@ -390,7 +390,7 @@ function MorningNews({ g, names }) {
   return (
     <div data-testid="morning" className="text-center text-lg">
       {m.victim ? <p><b className="text-red-300">{names[m.victim]}</b> was killed in the night.</p> : <p>Nobody died last night{m.saved ? ' — the Doctor saved them!' : '.'}</p>}
-      {m.caught && <p data-testid="morning-caught" className="mt-2 text-amber-200">The Detective caught <b>{names[m.caught]}</b> — Mafia, out of the game.</p>}
+      {/* the Detective's catch is announced by the narrator's voice only (ADR 0013): no text here */}
     </div>
   );
 }
@@ -597,7 +597,7 @@ function useNarration(view, send, names) {
       narrator.say(items).then(ack, (e) => { console.warn('[narrator] cue failed', e); ack(); });
     } else {
       const lines = linesFor(voice);
-      setCaption(items.map((c) => (typeof c === 'object' ? c.name : lines[c] || '')).join(' ').trim());
+      setCaption(captionedItems(items).map((c) => (typeof c === 'object' ? c.name : lines[c] || '')).join(' ').trim());
     }
   }, [cue?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => narrator.stop(), []);
