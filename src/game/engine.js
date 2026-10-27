@@ -289,7 +289,7 @@ function resolveNight(state) {
   const victim = deaths[0] || null;
   const attacked = ctx.attacks.length > 0;
   const saved = attacked && deaths.length === 0;
-  const afterKill = deaths.reduce(killPlayer, state.players);
+  const afterKill = deaths.reduce((players, name) => killPlayer(players, name), state.players);
   // a catch needs a living Mafia after the kill (Mafia never target Mafia; guard anyway)
   const caught = ctx.catches.find((t) => isMafia(state, t) && afterKill.some((p) => p.name === t && p.alive)) || null;
   return {
