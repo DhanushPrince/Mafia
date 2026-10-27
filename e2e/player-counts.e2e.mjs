@@ -334,8 +334,8 @@ async function narratorRun(n) {
       }
       // kill, then the Detective's catch, then the win check
       const expCaught = detAlive && check && isM(check) && alive.has(check) ? check : null;
-      const caughtShown = (await page.getByTestId('morning-caught').count()) > 0 ? (await page.getByTestId('morning-caught').innerText()).trim() : null;
-      if (caughtShown !== expCaught) ok(false, `R${round} morning caught "${caughtShown}", expected "${expCaught}"`);
+      // the catch is voice-only (ADR 0013): never named on screen
+      if ((await page.getByTestId('morning-caught').count()) > 0) ok(false, `R${round} morning shows a catch panel`);
       if (expCaught) {
         alive.delete(expCaught);
         if ((await page.locator(`[data-player="${expCaught}"]`).getAttribute('data-dead')) !== 'true') ok(false, `R${round} caught tile not marked dead`);

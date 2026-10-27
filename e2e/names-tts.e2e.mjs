@@ -99,8 +99,9 @@ try {
   const i = p.indexOf('killed_pre');
   ok(i >= 0 && p[i + 1] === 'NAME' && p[i + 2] === 'killed_post' && p[i + 3] === 'detective_found' && p[i + 4] === 'NAME' && p[i + 5] === 'voted_out_post', `morning sequence: ${p.slice(p.indexOf('morning')).join(' > ')}`);
   ok(!p.includes('killed'), 'old "killed" line not used when the name is ready');
-  await page.waitForFunction((m) => document.querySelector('[data-testid="narrator-caption"]')?.innerText.includes(`${m} has been eliminated`), mafia, { timeout: 5000 });
-  ok(true, `caption: "The Detective found one of the Mafia last night. ${mafia} has been eliminated."`);
+  // ADR 0013: the catch is spoken but never captioned; the caption keeps the kill line
+  const cap = await page.getByTestId('narrator-caption').innerText();
+  ok(!cap.includes(mafia) && !cap.includes('Detective') && cap.includes(`${villager} did not survive`), `caption stays on the kill line, no catch text: "${cap}"`);
   await page.getByRole('button', { name: 'See who won' }).click();
   await page.getByTestId('winner').waitFor({ timeout: 10000 });
   ok((await page.getByTestId('winner').getAttribute('data-winner')) === 'villagers', 'catching the only Mafia ends the game: villagers win');

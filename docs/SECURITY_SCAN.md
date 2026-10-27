@@ -7,7 +7,7 @@ Runs on every push to `main` and `online-rooms`, on every pull request, and on d
 | Job | What it does | Blocking? |
 |-----|--------------|-----------|
 | `sonarqube` | `npm ci`, unit tests with coverage (`npm run test:coverage` → `coverage/lcov.info`), then SonarQube Cloud analysis of `src/` and `worker/` (vulnerabilities, security hotspots, bugs, code smells, coverage) | Fails if the scan fails. To fail on the Quality Gate too, add `-Dsonar.qualitygate.wait=true` to the action's `args`. |
-| `npm-audit` | `npm audit --audit-level=high`, runtime deps (`--omit=dev`) then all deps | No (report only) until the existing high advisories are fixed; see ADR 0012 |
+| `npm-audit` | `npm audit --audit-level=high`, runtime deps (`--omit=dev`) then all deps | Yes (audit is clean; patched sharp/undici pinned via `overrides` in package.json); see ADR 0012 |
 
 ## One-time setup
 

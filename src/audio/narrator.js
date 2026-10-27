@@ -31,6 +31,18 @@ export const voicesFor = (lang) => Object.values(VOICES).filter((v) => v.lang ==
 export const linesFor = (voice) => (VOICES[voice]?.lang === 'ta' ? LINES_TA : LINES);
 export const clipUrl = (voice, id) => `/audio/${voice}/${id}.mp3`;
 
+/**
+ * The Detective's catch is announced by voice only (ADR 0013): from this clip on, the rest of a
+ * narration list ("The Detective found one of the Mafia last night. <name> has been eliminated.")
+ * is spoken but never shown as caption text.
+ */
+export const VOICE_ONLY_FROM = 'detective_found';
+/** The part of a narration list that may be shown as caption text. */
+export const captionedItems = (list) => {
+  const i = list.indexOf(VOICE_ONLY_FROM);
+  return i < 0 ? list : list.slice(0, i);
+};
+
 // 44-byte silent WAV, played on the user's first tap to unlock the shared element (iOS/Android autoplay).
 const NAME_GAP_MS = 150;
 
@@ -122,13 +134,15 @@ class Narrator {
     const gen = this.generation;
     const job = this.queue.then(async () => {
       let prev = null;
-      for (const id of list) {
+      const captioned = captionedItems(list).length; // the voice-only tail keeps the last caption
+      for (const [i, id] of list.entries()) {
         if (gen !== this.generation) return;
         const isName = typeof id === 'object';
         if (prev !== null && (isName || typeof prev === 'object')) await new Promise((r) => setTimeout(r, NAME_GAP_MS / this.rate));
         if (gen !== this.generation) return;
         const append = prev !== null && (isName || typeof prev === 'object');
-        await (isName ? this.playName(id.name, gen) : this.playOne(id, gen, append));
+        const caption = i < captioned;
+        await (isName ? this.playName(id.name, gen, caption) : this.playOne(id, gen, append, null, caption));
         prev = id;
       }
       // the last caption stays visible (also when a clip failed) until the next line / stop()
@@ -138,8 +152,8 @@ class Narrator {
   }
 
   /** A player's name: Kokoro clip if ready, else speechSynthesis, else just a short pause. */
-  playName(name, gen) {
-    this.setCaption(`${this.caption} ${name}`.trim());
+  playName(name, gen, caption = true) {
+    if (caption) this.setCaption(`${this.caption} ${name}`.trim());
     const url = nameVoice.get(this.voice, name);
     const lang = VOICES[this.voice]?.lang || 'en';
     const speak = () => (gen === this.generation ? speakName(name, { rate: this.rate, muted: this.muted, lang }) : undefined);
@@ -148,10 +162,10 @@ class Narrator {
     return this.playOne(null, gen, true, url).then((ok) => (ok === false ? speak() : undefined));
   }
 
-  playOne(id, gen, append = false, srcOverride = null) {
+  playOne(id, gen, append = false, srcOverride = null, caption = true) {
     const a = this.el();
     const lines = this.lines();
-    if (id !== null) this.setCaption(append ? `${this.caption} ${lines[id] || ''}`.trim() : lines[id] || '');
+    if (id !== null && caption) this.setCaption(append ? `${this.caption} ${lines[id] || ''}`.trim() : lines[id] || '');
     if (!a) return Promise.resolve();
     return new Promise((resolve) => {
       let done = false;

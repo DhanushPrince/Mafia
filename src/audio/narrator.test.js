@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { LANGS, DEFAULT_LANG, VOICES, normalizeLang, narratorVoice, voicesFor, linesFor, clipUrl, LINES, LINES_TA } from './narrator';
+import { LANGS, DEFAULT_LANG, VOICES, normalizeLang, narratorVoice, voicesFor, linesFor, clipUrl, LINES, LINES_TA, narrator, captionedItems } from './narrator';
 import { nameEngine, nameText, KOKORO_VOICES, PIPER_VOICES } from './nameVoice';
 
 describe('narrator language + voice selection', () => {
@@ -48,4 +48,24 @@ describe('narrator language + voice selection', () => {
     expect(nameText('ta_jaya', ' திவ்யா ')).toBe('திவ்யா.');
     expect(nameText('george', 'Karthik')).toBe('Karthik.');
   });
+});
+
+describe('the Detective catch is voice-only (ADR 0013)', () => {
+  const morning = ['morning', 'killed_pre', { name: 'Bob' }, 'killed_post', 'detective_found', { name: 'Alice' }, 'voted_out_post'];
+
+  it('captionedItems drops everything from detective_found on', () => {
+    expect(captionedItems(morning)).toEqual(['morning', 'killed_pre', { name: 'Bob' }, 'killed_post']);
+    expect(captionedItems(['morning', 'saved'])).toEqual(['morning', 'saved']);
+    expect(captionedItems(['morning', 'saved', 'detective_found'])).toEqual(['morning', 'saved']);
+  });
+
+  it('the narrator speaks the catch but the caption keeps the previous line', async () => {
+    const seen = [];
+    const off = narrator.subscribe((t) => seen.push(t));
+    narrator.setVoice('george');
+    await narrator.say(morning);
+    off();
+    expect(narrator.caption).toBe(`${LINES.killed_pre} Bob ${LINES.killed_post}`);
+    expect(seen.some((t) => t.includes('Alice') || t.includes(LINES.detective_found) || t.includes(LINES.voted_out_post))).toBe(false);
+  }, 10000);
 });

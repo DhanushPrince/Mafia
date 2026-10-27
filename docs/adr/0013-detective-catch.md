@@ -33,7 +33,15 @@ drives the same engine). Human GM mode is a manual reference screen, so only the
 - **Narration** reuses existing clips, no new audio: `detective_found` + the caught player's name +
   `voted_out_post` ("The Detective found one of the Mafia last night. <name> has been eliminated." / Tamil
   "... <name> ஆட்டத்தை விட்டு வெளியேறுறாங்க."). When the name cannot be spoken (no name voice), only
-  `detective_found` is said and the screen shows the name.
+  `detective_found` is said.
+- **Voice only (amended 2026-10-28).** The catch is announced by the narrator's voice alone; nothing on the
+  shared screen names it. The morning screen (App-GM `NarratorGame` and online `MorningNews`) shows only the
+  night kill / save, with no "Detective caught" panel, and captions stop at `detective_found`: the narrator
+  speaks the rest of the list but the caption keeps the previous line (`captionedItems` /
+  `VOICE_ONLY_FROM` in `src/audio/narrator.js`, also used for non-host online captions). The caught player's
+  tile is still shown dead (they are out and cannot be voted), without a role. The Detective's private
+  night result ("MAFIA" / "IS Mafia") is unchanged, and the game-over screens (roles, log, online
+  "The Detective caught ...") still show everything, as all roles are revealed there anyway.
 - **State.** `morning.caught` (name/seat or null) and log `caught` were added; saved games stay compatible
   (missing `caught` means no catch), so `ENGINE_VERSION` is unchanged.
 
