@@ -84,7 +84,7 @@ describe('phase flow', () => {
 
   it('no tap by timeout means no kill / no save / no result', () => {
     const s = night(start());
-    expect(s.morning).toEqual({ victim: null, attacked: false, saved: false, detectiveFoundMafia: false });
+    expect(s.morning).toEqual({ victim: null, attacked: false, saved: false, detectiveFoundMafia: false, caught: null });
     expect(s.players.every((p) => p.alive)).toBe(true);
     expect(s.night.result).toBeNull();
     expect(entryClips(s)).toEqual(['morning', 'saved']);
@@ -115,7 +115,7 @@ describe('kill vs save', () => {
 
   it('kill target == save -> nobody dies', () => {
     const s = night(start(), { kill: 'Bob', save: 'Bob' });
-    expect(s.morning).toEqual({ victim: null, attacked: true, saved: true, detectiveFoundMafia: false });
+    expect(s.morning).toEqual({ victim: null, attacked: true, saved: true, detectiveFoundMafia: false, caught: null });
     expect(s.players.every((p) => p.alive)).toBe(true);
     expect(entryClips(s)).toEqual(['morning', 'saved']);
     expect(s.log[0]).toMatchObject({ killed: null, saved: true });
@@ -234,6 +234,99 @@ describe('detective', () => {
   });
 });
 
+const SEVEN = [
+  { name: 'M1', role: 'mafia' },
+  { name: 'M2', role: 'mafia' },
+  { name: 'Doc', role: 'doctor' },
+  { name: 'Det', role: 'detective' },
+  { name: 'V1', role: 'villager' },
+  { name: 'V2', role: 'villager' },
+  { name: 'V3', role: 'villager' },
+];
+const alive = (s) => s.players.filter((p) => p.alive).map((p) => p.name);
+
+describe('detective catch: a correct check eliminates that Mafia at morning', () => {
+  it('catching the last Mafia -> caught player dead, village wins straight from the morning (no day)', () => {
+    let s = night(start(), { kill: 'Bob', save: 'Carol', check: 'Alice' });
+    expect(s.morning).toMatchObject({ victim: 'Bob', caught: 'Alice', detectiveFoundMafia: true });
+    expect(s.players.find((p) => p.name === 'Alice').alive).toBe(false);
+    expect(s.log[0]).toMatchObject({ killed: 'Bob', caught: 'Alice', detectiveCheck: { target: 'Alice', isMafia: true } });
+    s = run(s, { type: 'ADVANCE' }, { type: 'ADVANCE' }); // MORNING -> CHECK_WIN -> END
+    expect(s.phase).toBe(PHASES.END);
+    expect(s.winner).toBe('villagers');
+    expect(entryClips(s)).toEqual(['villagers_win']);
+  });
+
+  it('catching one of two Mafia -> caught player dead, the game goes on to the day', () => {
+    let s = night(start(SEVEN), { kill: 'V1', save: 'Doc', check: 'M2' });
+    expect(s.morning).toMatchObject({ victim: 'V1', caught: 'M2' });
+    expect(alive(s)).toEqual(['M1', 'Doc', 'Det', 'V2', 'V3']);
+    s = run(s, { type: 'ADVANCE' }, { type: 'ADVANCE' });
+    expect(s.phase).toBe(PHASES.DAY_DISCUSS);
+    // the caught Mafia is out of play: cannot be voted for, takes no Mafia turn
+    s = run(s, { type: 'ADVANCE' });
+    expect(selectTargets(s).map((t) => t.name)).not.toContain('M2');
+    const voted = reducer(s, { type: 'VOTE', name: 'M2' });
+    expect(voted).toBe(s);
+  });
+
+  it('wrong guess is unchanged: nobody caught, nothing said about the Detective', () => {
+    const s = night(start(SEVEN), { kill: 'V1', check: 'V2' });
+    expect(s.morning).toMatchObject({ victim: 'V1', caught: null, detectiveFoundMafia: false });
+    expect(alive(s)).toEqual(['M1', 'M2', 'Doc', 'Det', 'V2', 'V3']);
+    expect(entryClips(s, { canSayName: () => true })).toEqual(['morning', 'killed_pre', { name: 'V1' }, 'killed_post']);
+  });
+
+  it('doctor save + catch: the save blocks the kill, the catch still happens', () => {
+    const s = night(start(SEVEN), { kill: 'V1', save: 'V1', check: 'M1' });
+    expect(s.morning).toMatchObject({ victim: null, saved: true, caught: 'M1' });
+    expect(alive(s)).toEqual(['M2', 'Doc', 'Det', 'V1', 'V2', 'V3']);
+  });
+
+  it('the Doctor saving the Mafia the Detective caught does not protect them', () => {
+    const s = night(start(SEVEN), { kill: 'V1', save: 'M1', check: 'M1' });
+    expect(s.morning).toMatchObject({ victim: 'V1', caught: 'M1' });
+    expect(alive(s)).not.toContain('M1');
+  });
+
+  it('kill then catch then win check: catching the last Mafia beats a kill that reached parity', () => {
+    // M, Doc, Det: without the catch, killing Doc leaves 1 Mafia vs 1 -> Mafia would win
+    const three = [{ name: 'M', role: 'mafia' }, { name: 'Doc', role: 'doctor' }, { name: 'Det', role: 'detective' }];
+    let s = night(start(three), { kill: 'Doc', check: 'M' });
+    expect(s.morning).toMatchObject({ victim: 'Doc', caught: 'M' });
+    s = run(s, { type: 'ADVANCE' }, { type: 'ADVANCE' });
+    expect(s.winner).toBe('villagers');
+    // control: the same night without the catch is a Mafia win
+    let c = night(start(three), { kill: 'Doc', check: 'Doc' });
+    c = run(c, { type: 'ADVANCE' }, { type: 'ADVANCE' });
+    expect(c.winner).toBe('mafia');
+  });
+
+  it('kill + catch with Mafia left: counts are taken after both deaths', () => {
+    // 2 Mafia vs 3: the kill alone would make it 2 vs 2 (Mafia win); the catch makes it 1 vs 2
+    const five = [{ name: 'M1', role: 'mafia' }, { name: 'M2', role: 'mafia' }, { name: 'Doc', role: 'doctor' }, { name: 'Det', role: 'detective' }, { name: 'V', role: 'villager' }];
+    let s = night(start(five), { kill: 'V', check: 'M1' });
+    expect(computeWinner(s.players)).toEqual({ mafiaAlive: 1, othersAlive: 2, winner: null });
+    s = run(s, { type: 'ADVANCE' }, { type: 'ADVANCE' });
+    expect(s.phase).toBe(PHASES.DAY_DISCUSS);
+  });
+
+  it('the Detective killed the same night still catches (both happened during the night)', () => {
+    let s = night(start(SEVEN), { kill: 'Det', check: 'M1' });
+    expect(s.morning).toMatchObject({ victim: 'Det', caught: 'M1' });
+    expect(alive(s)).toEqual(['M2', 'Doc', 'V1', 'V2', 'V3']);
+  });
+
+  it('a caught target who is already dead after the kill is not caught twice (guard)', () => {
+    // Mafia never target Mafia through the UI; force it through the state to check the guard
+    let s = run(start(SEVEN), { type: 'ADVANCE' });
+    s = { ...s, night: { selections: { mafia: 'M1' }, result: null } };
+    s = run(s, { type: 'ADVANCE' }, { type: 'ADVANCE' }, { type: 'SELECT', name: 'M1' }, { type: 'ADVANCE' });
+    expect(s.morning).toMatchObject({ victim: 'M1', caught: null, detectiveFoundMafia: true });
+    expect(entryClips(s, { canSayName: () => true })).toEqual(['morning', 'killed_pre', { name: 'M1' }, 'killed_post', 'detective_found']);
+  });
+});
+
 describe('morning: detective found a Mafia', () => {
   it('correct guess + kill -> killed, then detective_found (no name)', () => {
     const s = night(start(), { kill: 'Bob', save: 'Carol', check: 'Alice' });
@@ -294,7 +387,7 @@ describe('morning: detective found a Mafia', () => {
   });
 
   it('flag resets on the next night', () => {
-    let s = night(start(), { kill: 'Bob', save: 'Carol', check: 'Alice' });
+    let s = night(start(SEVEN), { kill: 'V1', check: 'M1' });
     s = day(s, null); // tie -> next night
     expect(s.phase).toBe(PHASES.NIGHT_INTRO);
     expect(s.morning).toBeNull();
@@ -326,8 +419,14 @@ describe('narration sequence builder (names)', () => {
   });
   it('entryClips(MORNING) uses the builder with the given opts', () => {
     const s = night(start(), { kill: 'Bob', save: 'Carol', check: 'Alice' });
-    expect(entryClips(s, yes)).toEqual(['morning', 'killed_pre', { name: 'Bob' }, 'killed_post', 'detective_found']);
+    expect(entryClips(s, yes)).toEqual(['morning', 'killed_pre', { name: 'Bob' }, 'killed_post', 'detective_found', { name: 'Alice' }, 'voted_out_post']);
     expect(entryClips(s)).toEqual(['morning', 'killed', 'detective_found']);
+  });
+  it('the catch names the caught Mafia when it can be said, and works with a save', () => {
+    expect(morningClips({ victim: null, saved: true, caught: 'Ravi', detectiveFoundMafia: true }, yes)).toEqual(['morning', 'saved', 'detective_found', { name: 'Ravi' }, 'voted_out_post']);
+    expect(morningClips({ victim: null, saved: true, caught: 'Ravi', detectiveFoundMafia: true }, no)).toEqual(['morning', 'saved', 'detective_found']);
+    const only = { canSayName: (n) => n === 'Ravi' };
+    expect(morningClips({ victim: 'Arjun', caught: 'Ravi' }, only)).toEqual(['morning', 'killed', 'detective_found', { name: 'Ravi' }, 'voted_out_post']);
   });
   it('voted out with name / fallback / tie / before the vote', () => {
     const base = start();

@@ -43,7 +43,8 @@ try {
     if (role === 'mafia') { await page.screenshot({ path: `${OUT}/07-night-turn-${TURN}.png` }); await tap(page.getByRole('button', { name: villagers[0], exact: true })); }
     if (role === 'doctor') await tap(page.getByRole('button', { name: villagers[1], exact: true }));
     if (role === 'detective') {
-      const target = names.find((x) => roles[x] !== 'detective');
+      // not the Mafia: a correct check would catch them and end this 4-player game at morning
+      const target = names.find((x) => roles[x] !== 'detective' && roles[x] !== 'mafia');
       await tap(page.getByRole('button', { name: target, exact: true })).catch(() => {});
     }
   }

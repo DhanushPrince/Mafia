@@ -390,6 +390,7 @@ function MorningNews({ g, names }) {
   return (
     <div data-testid="morning" className="text-center text-lg">
       {m.victim ? <p><b className="text-red-300">{names[m.victim]}</b> was killed in the night.</p> : <p>Nobody died last night{m.saved ? ' — the Doctor saved them!' : '.'}</p>}
+      {m.caught && <p data-testid="morning-caught" className="mt-2 text-amber-200">The Detective caught <b>{names[m.caught]}</b> — Mafia, out of the game.</p>}
     </div>
   );
 }
@@ -437,6 +438,8 @@ function Results({ view, send, names }) {
   return (
     <div className="flex flex-col gap-4" data-testid="results">
       <h2 data-testid="winner" className={`text-3xl font-bold text-center ${mafiaWon ? 'text-red-400' : 'text-cyan-300'}`}>{mafiaWon ? 'The Mafia win' : 'The village wins'}</h2>
+      {/* ended straight from the morning (no vote that day): say why */}
+      {!g.vote && g.morning?.caught && <p data-testid="end-caught" className="text-center text-amber-200">The Detective caught <b>{names[g.morning.caught]}</b>.</p>}
       <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {g.players.map((p) => (
           <li key={p.seat} className={`flex items-center gap-2 rounded-lg px-3 py-2 bg-white/5 ${p.alive ? '' : 'opacity-50 line-through'}`}>
