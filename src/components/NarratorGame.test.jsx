@@ -110,3 +110,28 @@ describe('NarratorGame: detective catch', () => {
     expect(screen.getByRole('button', { name: 'Continue to discussion' })).toBeTruthy();
   });
 });
+
+describe('NarratorGame: the Detective is not told the answer (ADR 0013)', () => {
+  /** NIGHT_INTRO -> DETECTIVE_TURN after the Mafia and Doctor turns. */
+  const toDetective = (players) => run(start(players), { type: 'ADVANCE' }, { type: 'SELECT', name: 'V1' }, { type: 'ADVANCE' }, { type: 'ADVANCE' });
+
+  it.each([['a Mafia', 'M1'], ['a villager', 'V2']])('checking %s only shows "Choice locked in": same screen, same sounds', async (_, target) => {
+    const s = toDetective(SIX);
+    expect(s.phase).toBe(PHASES.DETECTIVE_TURN);
+    narrator.say.mockClear();
+    render(<Harness initial={s} />);
+    await act(async () => {}); // wake clip resolves -> the window opens
+    const turn = screen.getByTestId('night-turn');
+    expect(turn.dataset.stage).toBe('open');
+    expect(screen.queryByTestId('detective-locked')).toBeNull();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: target })); });
+    expect(screen.getByTestId('detective-locked').textContent).toBe('Choice locked in');
+    expect(screen.queryByTestId('detective-result')).toBeNull();
+    expect(turn.textContent).not.toMatch(/MAFIA|Mafia/);
+    // the pick is locked: one check per night
+    expect(screen.getAllByRole('button').filter((b) => b.closest('[data-testid="night-turn"]')).every((b) => b.disabled)).toBe(true);
+    // no "here is your answer" (or any other) clip after the tap
+    expect(narrator.say.mock.calls.flat(2)).not.toContain('detective_result');
+    expect(narrator.say.mock.calls.map((c) => c[0])).toEqual([['detective_wake']]);
+  });
+});

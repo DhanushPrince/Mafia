@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
-  DEFAULT_TIMERS, TURN_OPTIONS_SEC, DISCUSS_OPTIONS_MIN, normalizeTimers, timingFor, resultMsFor, isFastMode, remainingMs,
+  DEFAULT_TIMERS, TURN_OPTIONS_SEC, DISCUSS_OPTIONS_MIN, normalizeTimers, timingFor, isFastMode, remainingMs,
 } from './timing';
 import { loadSettings, saveSettings, DEFAULT_SETTINGS } from './storage';
 import { reducer, createInitialState, serialize, deserialize, PHASES } from './engine';
@@ -13,22 +13,18 @@ describe('timer presets', () => {
   });
 
   it('default timings match the old hard-coded values', () => {
-    expect(timingFor(undefined, { fast: false })).toEqual({ fast: false, turnMs: 15000, resultMs: 4000, discussMs: 180000, gapMs: 1200, rate: 1 });
+    expect(timingFor(undefined, { fast: false })).toEqual({ fast: false, turnMs: 15000, discussMs: 180000, gapMs: 1200, rate: 1 });
   });
 
   it('uses the chosen timers', () => {
     const t = timingFor({ turnSec: 30, discussMin: 1 }, { fast: false });
     expect(t.turnMs).toBe(30000);
     expect(t.discussMs).toBe(60000);
-    expect(t.resultMs).toBe(8000);
   });
 
-  it('ties the detective result time to the turn length, kept between 3 s and 8 s', () => {
-    expect(resultMsFor(10000)).toBe(3000);
-    expect(resultMsFor(15000)).toBe(4000);
-    expect(resultMsFor(20000)).toBe(5300);
-    expect(resultMsFor(60000)).toBe(8000);
-    TURN_OPTIONS_SEC.forEach((s) => expect(resultMsFor(s * 1000)).toBeLessThan(s * 1000 - 5000));
+  it('has no Detective reading time: the answer is never shown at night (ADR 0013)', () => {
+    expect(timingFor({ turnSec: 30, discussMin: 1 }, { fast: false })).not.toHaveProperty('resultMs');
+    expect(timingFor(undefined, { fast: true })).not.toHaveProperty('resultMs');
   });
 
   it('rejects values that are not presets', () => {
@@ -43,7 +39,7 @@ describe('timer presets', () => {
     expect(isFastMode('?fast=0')).toBe(false);
     expect(isFastMode('')).toBe(false);
     const t = timingFor({ turnSec: 60, discussMin: 10 }, { fast: true });
-    expect(t).toMatchObject({ fast: true, turnMs: 3000, resultMs: 1200, discussMs: 4000 });
+    expect(t).toMatchObject({ fast: true, turnMs: 3000, discussMs: 4000 });
   });
 });
 

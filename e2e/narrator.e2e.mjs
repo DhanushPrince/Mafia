@@ -206,31 +206,14 @@ try {
   ok(!detTargets.includes(detective) && detTargets.length === 3, 'detective list excludes the detective');
   // night 1: a wrong guess (the Doctor) - nothing happens at morning; night 2 catches the Mafia
   await tap(page.getByRole('button', { name: doctor, exact: true }));
-  await page.getByTestId('detective-result').waitFor({ timeout: 3000 });
-  ok((await page.getByTestId('detective-result').getAttribute('data-mafia')) === 'false', 'detective result: NOT Mafia (thumbs down)');
+  // ADR 0013: the Detective is never told the answer, only that the pick is locked in
+  await page.getByTestId('detective-locked').waitFor({ timeout: 3000 });
+  ok((await page.getByTestId('detective-locked').innerText()).trim() === 'Choice locked in', 'detective pick: "Choice locked in"');
+  ok((await page.getByTestId('detective-result').count()) === 0 && !/MAFIA/i.test(await turn('detective').innerText()), 'wrong check: no verdict on screen');
   await page.waitForTimeout(400);
-  await shot('05-detective-result');
-  ok(await turn('detective').isVisible(), 'detective turn still running while result is shown');
-  ok((await page.getByTestId('detective-result-name').innerText()).includes(doctor), 'investigated name shown above the verdict');
-  {
-    // the result stays up for the rest of the window (no early hide), then clears at the 'sleep' stage
-    const t0 = Date.now();
-    let hiddenEarly = false;
-    for (;;) {
-      const s = await page.evaluate(() => ({
-        stage: document.querySelector('[data-testid="night-turn"]')?.getAttribute('data-stage'),
-        result: Boolean(document.querySelector('[data-testid="detective-result"]')),
-      }));
-      if (s.stage !== 'open') break;
-      if (!s.result) hiddenEarly = true;
-      if (Date.now() - t0 > 15000) break;
-      await page.waitForTimeout(100);
-    }
-    ok(!hiddenEarly, `detective result stayed visible until the window closed (${((Date.now() - t0) / 1000).toFixed(1)}s after the check)`);
-    await turn('detective', 'sleep').waitFor({ timeout: 5000 }).catch(() => {});
-    await page.getByTestId('detective-result').waitFor({ state: 'detached', timeout: 3000 }).catch(() => {});
-    ok((await page.getByTestId('detective-result').count()) === 0, 'detective result cleared once the sleep stage starts');
-  }
+  await shot('05-detective-locked');
+  ok(await turn('detective').isVisible(), 'detective turn keeps running after the pick (fixed window)');
+  ok(await page.locator('[data-testid="night-turn"] li button').evaluateAll((bs) => bs.every((b) => b.disabled)), 'detective pick locked: buttons disabled');
 
   // --- morning ---
   await page.getByTestId('morning-victim').waitFor({ timeout: 15000 });
@@ -247,7 +230,7 @@ try {
   ok((await page.evaluate(() => JSON.parse(localStorage.getItem('mafia-dealer:settings')).muted)) === true, 'mute persisted');
   await tap(page.getByRole('button', { name: 'Unmute narrator' }));
 
-  const expected = ['pass_hint', 'night_start', 'mafia_wake', 'mafia_sleep', 'doctor_wake', 'doctor_sleep', 'detective_wake', 'detective_result', 'detective_sleep', 'morning', 'killed'];
+  const expected = ['pass_hint', 'night_start', 'mafia_wake', 'mafia_sleep', 'doctor_wake', 'doctor_sleep', 'detective_wake', 'detective_sleep', 'morning', 'killed'];
   await waitPlayed(expected);
   const missing = expected.filter((id) => !media.includes(`/audio/george/${id}.mp3`));
   ok(missing.length === 0, `audio element requested george clips for night 1${missing.length ? ' (missing: ' + missing.join(',') + ')' : ''}`);
@@ -293,9 +276,8 @@ try {
   await tap(page.getByRole('button', { name: mafia, exact: true })); // the Doctor's save never blocks a catch
   await turn('detective').waitFor({ timeout: 15000 });
   await tap(page.getByRole('button', { name: mafia, exact: true }));
-  await page.getByTestId('detective-result').waitFor({ timeout: 3000 });
-  ok((await page.getByTestId('detective-result').getAttribute('data-mafia')) === 'true', 'detective result: MAFIA (thumbs up)');
-  ok(await page.getByText('MAFIA', { exact: true }).isVisible(), 'MAFIA text shown');
+  await page.getByTestId('detective-locked').waitFor({ timeout: 3000 });
+  ok((await page.getByTestId('detective-result').count()) === 0 && !/MAFIA/i.test(await turn('detective').innerText()), 'correct check: still only "Choice locked in", no verdict');
   await page.getByTestId('morning-result').waitFor({ timeout: 15000 });
   ok((await page.getByTestId('morning-victim').innerText()).trim() === doctor, `morning 2 shows victim ${doctor}`);
   // ADR 0013: the catch is voice-only; no morning text or caption names the caught Mafia

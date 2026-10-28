@@ -1,11 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
-  Volume2, VolumeX, X, Moon, Sun, Skull, HelpCircle, ThumbsUp, ThumbsDown, Timer, Vote, ShieldCheck, Search, Trophy,
+  Volume2, VolumeX, X, Moon, Sun, Skull, HelpCircle, Timer, Vote, ShieldCheck, Search, Trophy,
 } from 'lucide-react';
 import { ROLES } from '../game/roleVisuals';
 import {
-  PHASES, isTurnPhase, currentTurnRole, selectTargets, selectCurrentSelection, selectDetectiveResult,
+  PHASES, isTurnPhase, currentTurnRole, selectTargets, selectCurrentSelection,
   entryClips, exitClips, voteClips, alivePlayers, selectWinner,
 } from '../game/engine';
 import { narrator } from '../audio/narrator';
@@ -106,20 +106,21 @@ function Header({ state, night, muted, onToggleMute, onQuit }) {
 }
 
 /** Dark, low-contrast screen shared by every night turn (identical layout for all roles). */
-function NightTurn({ state, dispatch, stage, endsAt, now, showResult, timing }) {
+function NightTurn({ state, dispatch, stage, endsAt, now, timing }) {
   const role = currentTurnRole(state);
   const titles = TURN_TITLES[role] || { wake: 'Open your eyes', hint: 'Tap a name' };
   const targets = selectTargets(state);
   const selected = selectCurrentSelection(state);
   const remaining = remainingMs(endsAt, now, timing.turnMs);
-  // detective result needs time to be read, so the detective's taps close resultMs before the end
-  const detectiveLocked = role === 'detective' && (Boolean(selected) || remaining < timing.resultMs);
+  // one check per night; the Detective is never told the answer (ADR 0013): a correct check is announced at morning
+  const detectiveLocked = role === 'detective' && Boolean(selected);
   const canTap = stage === 'open' && !detectiveLocked;
   return (
     <div data-testid="night-turn" data-role={role} data-stage={stage} className="fixed inset-0 z-40 bg-black flex flex-col items-center px-4 pt-20 pb-24 overflow-y-auto">
       <div className="w-full max-w-md flex flex-col items-center">
         <h2 className="text-2xl font-semibold text-neutral-400 text-center">{stage === 'sleep' ? 'Close your eyes' : titles.wake}</h2>
         <p className="text-neutral-600 text-sm mt-1">{stage === 'open' ? titles.hint : stage === 'wake' ? 'Listen…' : ' '}</p>
+        {detectiveLocked && stage === 'open' && <p data-testid="detective-locked" className="text-neutral-400 text-base mt-2">Choice locked in</p>}
         <div data-testid="turn-countdown" className="mt-4 mb-6 font-mono text-5xl text-neutral-500 tabular-nums">
           {stage === 'sleep' ? '0' : Math.ceil(remaining / 1000)}
         </div>
@@ -147,32 +148,6 @@ function NightTurn({ state, dispatch, stage, endsAt, now, showResult, timing }) 
           </ul>
         )}
       </div>
-      <AnimatePresence>
-        {showResult !== null && showResult !== undefined && (
-          <motion.div
-            key="result"
-            data-testid="detective-result"
-            data-mafia={String(showResult)}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center gap-6"
-          >
-            <div data-testid="detective-result-name" className="text-center">
-              <div className="text-3xl font-semibold text-white/90">{selected}</div>
-              <div className="text-xl text-neutral-300 mt-1">is</div>
-            </div>
-            {showResult ? (
-              <ThumbsUp className="w-36 h-36 text-red-500" strokeWidth={1.75} />
-            ) : (
-              <ThumbsDown className="w-36 h-36 text-emerald-400" strokeWidth={1.75} />
-            )}
-            <div className={`text-5xl font-bold tracking-widest text-center ${showResult ? 'text-red-500' : 'text-emerald-400'}`}>
-              {showResult ? 'MAFIA' : 'NOT MAFIA'}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }
@@ -396,7 +371,6 @@ function EndScreen({ state, onRestart }) {
 function NarratorGame({ state, dispatch, settings, onSettings, onRestart }) {
   const [stage, setStage] = useState(null); // night turn: 'wake' | 'open' | 'sleep'
   const [endsAt, setEndsAt] = useState(null); // turn window / discussion end
-  const [showResult, setShowResult] = useState(null);
   const now = useNow(endsAt !== null);
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -418,7 +392,6 @@ function NarratorGame({ state, dispatch, settings, onSettings, onRestart }) {
     const T = timingFor(s.timers); // chosen at setup (saved with the game); ?fast=1 overrides
     setStage(null);
     setEndsAt(null);
-    setShowResult(null);
 
     (async () => {
       if (phase === PHASES.CHECK_WIN) {
@@ -441,7 +414,6 @@ function NarratorGame({ state, dispatch, settings, onSettings, onRestart }) {
         setStage('open');
         await wait(T.turnMs);
         if (ctl.cancelled) return;
-        setShowResult(null);
         setEndsAt(null);
         setStage('sleep');
         await narrator.say(exitClips(phase));
@@ -484,16 +456,6 @@ function NarratorGame({ state, dispatch, settings, onSettings, onRestart }) {
     prevVoteKey.current = voteKey;
   }, [voteKey]);
 
-  // Detective result: big thumbs until the turn window ends (always >= resultMs), plus the "here is your answer" clip
-  const detectiveResult = state.phase === PHASES.DETECTIVE_TURN ? selectDetectiveResult(state) : null;
-  const investigated = state.phase === PHASES.DETECTIVE_TURN ? state.night.selections.detective : null;
-  useEffect(() => {
-    if (!investigated || detectiveResult === null) return undefined;
-    setShowResult(detectiveResult);
-    narrator.say('detective_result');
-    // stays up until the turn's 'sleep' stage (cleared there); taps lock >= resultMs before the end
-    return undefined;
-  }, [investigated, detectiveResult]);
 
   // Ambient drone under night phases
   const nightish = NIGHT_PHASES.has(state.phase);
@@ -509,7 +471,7 @@ function NarratorGame({ state, dispatch, settings, onSettings, onRestart }) {
   let body = null;
   if (state.phase === PHASES.NIGHT_INTRO) body = <NightIntro state={state} />;
   else if (isTurnPhase(state.phase))
-    body = <NightTurn state={state} dispatch={dispatch} stage={stage || 'wake'} endsAt={endsAt} now={now} showResult={showResult} timing={timing} />;
+    body = <NightTurn state={state} dispatch={dispatch} stage={stage || 'wake'} endsAt={endsAt} now={now} timing={timing} />;
   else if (state.phase === PHASES.MORNING) body = <Morning state={state} dispatch={dispatch} />;
   else if (state.phase === PHASES.DAY_DISCUSS) body = <Discuss state={state} dispatch={dispatch} endsAt={endsAt} now={now} timing={timing} />;
   else if (state.phase === PHASES.VOTE) body = <VoteScreen key={state.round} state={state} dispatch={dispatch} onContinue={continueAfterVote} />;

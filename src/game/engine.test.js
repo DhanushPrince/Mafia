@@ -552,7 +552,7 @@ describe('night order from ROLE_DEFS', () => {
 
   it('allClipIds covers every narrator clip', () => {
     expect(allClipIds().sort()).toEqual(
-      ['detective_result', 'detective_sleep', 'detective_wake', 'discuss', 'doctor_sleep', 'doctor_wake', 'killed', 'mafia_sleep', 'mafia_wake', 'mafia_win', 'morning', 'night_start', 'pass_hint', 'saved', 'detective_found', 'killed_pre', 'killed_post', 'voted_out_pre', 'voted_out_post', 'tie', 'villagers_win', 'vote', 'voted_out'].sort()
+      ['detective_sleep', 'detective_wake', 'discuss', 'doctor_sleep', 'doctor_wake', 'killed', 'mafia_sleep', 'mafia_wake', 'mafia_win', 'morning', 'night_start', 'pass_hint', 'saved', 'detective_found', 'killed_pre', 'killed_post', 'voted_out_pre', 'voted_out_post', 'tie', 'villagers_win', 'vote', 'voted_out'].sort()
     );
   });
 });

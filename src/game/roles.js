@@ -79,7 +79,6 @@ export const ROLE_DEFS = {
     nightOrder: 3,
     wakeClip: 'detective_wake',
     sleepClip: 'detective_sleep',
-    resultClip: 'detective_result',
     targetRule: 'aliveExceptSelf',
     action: 'investigate',
   },

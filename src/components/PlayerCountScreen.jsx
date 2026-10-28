@@ -4,7 +4,7 @@ import { BookOpen, Users, ChevronUp, ChevronDown, Crown, Smartphone, Play, Rotat
 import { narrator, LANGS, normalizeLang, narratorVoice, voicesFor } from '../audio/narrator';
 
 import { MIN_PLAYERS, MAX_PLAYERS } from '../game/roles';
-import { TURN_OPTIONS_SEC, DISCUSS_OPTIONS_MIN, normalizeTimers, resultMsFor, formatTurn, formatDiscuss } from '../game/timing';
+import { TURN_OPTIONS_SEC, DISCUSS_OPTIONS_MIN, normalizeTimers, formatTurn, formatDiscuss } from '../game/timing';
 
 // One shared AudioContext for every tick (browsers cap the number of live contexts).
 let sharedAudioCtx = null;
@@ -194,7 +194,6 @@ const PresetRow = ({ label, icon: Icon, options, value, format, onChange, testId
 /** Night turn + day discussion length for narrator mode (saved in settings and with the game). */
 function TimerSettings({ settings, onSettings }) {
   const { turnSec, discussMin } = normalizeTimers(settings);
-  const resultSec = Math.round(resultMsFor(turnSec * 1000) / 1000);
   return (
     <div data-testid="timer-settings" className="flex flex-col gap-3 rounded-lg border border-white/10 bg-black/20 p-3">
       <div className="flex items-center gap-2 text-xs font-mono tracking-widest uppercase text-violet-200/80">
@@ -219,7 +218,7 @@ function TimerSettings({ settings, onSettings }) {
         testId="discuss-length"
       />
       <p data-testid="timer-summary" className="text-[11px] leading-snug text-white/40">
-        Each role gets {formatTurn(turnSec)} with eyes open. The Detective sees the answer for at least {resultSec}s. Discussion: {formatDiscuss(discussMin)} (can be skipped).
+        Each role gets {formatTurn(turnSec)} with eyes open. Discussion: {formatDiscuss(discussMin)} (can be skipped).
       </p>
     </div>
   );

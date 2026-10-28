@@ -5,7 +5,7 @@ import { X, ChevronRight, Users, Shield, Moon, Sun, Trophy, Lightbulb } from 'lu
 const NAV_ITEMS = [
   { id: 'overview', num: 1, title: 'GAME OVERVIEW', desc: 'Learn the basics of the game.', color: 'text-blue-400', bg: 'bg-blue-500', emoji: '👥' },
   { id: 'mafia', num: 2, title: 'MAFIA', desc: 'Eliminate villagers at night without getting caught.', color: 'text-red-400', bg: 'bg-red-500', emoji: '🔪' },
-  { id: 'detective', num: 3, title: 'DETECTIVE', desc: 'Investigate one player each night. Find a Mafia and they are caught.', color: 'text-yellow-400', bg: 'bg-yellow-500', emoji: '🕵️' },
+  { id: 'detective', num: 3, title: 'DETECTIVE', desc: 'Point at one suspect each night. You are not told if you are right; if it was a Mafia, the Game Master announces it in the morning and they are out.', color: 'text-yellow-400', bg: 'bg-yellow-500', emoji: '🕵️' },
   { id: 'doctor', num: 4, title: 'DOCTOR', desc: 'Save one player from elimination each night.', color: 'text-blue-400', bg: 'bg-blue-500', emoji: '💉' },
   { id: 'villager', num: 5, title: 'VILLAGER', desc: 'Discuss, deduce and vote out the Mafia during the day.', color: 'text-green-400', bg: 'bg-green-500', emoji: '🧑‍🌾' },
   { id: 'win', num: 6, title: 'HOW TO WIN', desc: 'Complete goals and win the game.', color: 'text-purple-400', bg: 'bg-purple-500', emoji: '🏆' },
@@ -48,8 +48,8 @@ const SECTIONS_CONTENT = {
   },
   detective: {
     title: 'DETECTIVE',
-    body: 'The Detective is the village\'s best hope. Each night, they investigate one player to learn if they are Mafia or not. If that player is Mafia, they are caught: in the morning, after the night\'s kill, the Game Master announces that the Detective caught them by name and they are out of the game, just like an elimination. If that was the last Mafia, the village wins at once, with no discussion or vote. A wrong guess is not announced.',
-    abilities: ['Investigate one player each night', 'Catch a Mafia: they are out at morning', 'Catching the last Mafia wins the game for the village', 'The Doctor\'s save does not protect a caught Mafia'],
+    body: 'The Detective is the village\'s best hope. Each night, they point at one player they suspect. The Game Master does not tell them whether they are right: the pick is simply locked in. If that player is Mafia, they are caught: in the morning, after the night\'s kill, the Game Master announces that the Detective identified a Mafia, names them, and they are out of the game, just like an elimination. If that was the last Mafia, the village wins at once, with no discussion or vote. A wrong guess is never announced.',
+    abilities: ['Point at one suspect each night (you are not told the answer)', 'Catch a Mafia: the Game Master announces it at morning and they are out', 'Catching the last Mafia wins the game for the village', 'The Doctor\'s save does not protect a caught Mafia'],
   },
   doctor: {
     title: 'DOCTOR',

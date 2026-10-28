@@ -363,7 +363,7 @@ function NightAction({ view, send, names }) {
               type="button"
               data-testid="target"
               data-name={names[t.seat]}
-              disabled={t.disabled}
+              disabled={t.disabled || (role === 'detective' && Boolean(g.mySelection))}
               title={t.reason || ''}
               onClick={() => send({ t: 'select', target: t.seat })}
               className={`rounded-xl px-3 py-3 border text-left transition-colors disabled:opacity-30 ${picked ? 'border-violet-300 bg-violet-500/25' : 'border-white/15 bg-white/5 hover:bg-white/10'}`}
@@ -375,10 +375,9 @@ function NightAction({ view, send, names }) {
           );
         })}
       </div>
-      {g.detectiveResult && (
-        <p data-testid="detective-result" className={`text-center text-lg font-bold ${g.detectiveResult.isMafia ? 'text-red-400' : 'text-cyan-300'}`}>
-          {names[g.detectiveResult.target]} {g.detectiveResult.isMafia ? 'IS Mafia' : 'is not Mafia'}
-        </p>
+      {role === 'detective' && g.mySelection && (
+        // the answer is never shown (ADR 0013): a correct check is announced at morning
+        <p data-testid="detective-locked" className="text-center text-lg font-bold text-white/80">Choice locked in</p>
       )}
     </div>
   );
@@ -484,7 +483,6 @@ function GameView({ view, send, names, caption, serverNow }) {
             <Moon className="w-14 h-14 text-indigo-300/70" />
             <p className="text-xl">Eyes closed.</p>
             <p className="text-white/50 text-sm">{g.awake ? 'Your turn is coming…' : g.turnRole ? `The ${ROLES[g.turnRole]?.name || g.turnRole} is awake.` : 'Everyone sleeps.'}</p>
-            {g.detectiveResult && <p data-testid="detective-result" className="font-bold">{names[g.detectiveResult.target]} {g.detectiveResult.isMafia ? 'IS Mafia' : 'is not Mafia'}</p>}
           </div>
         ))}
         {!g.night && !ended && (step === 'morning' || step === 'morningRead') && <MorningNews g={g} names={names} />}
@@ -504,7 +502,7 @@ function GameView({ view, send, names, caption, serverNow }) {
         {ended && <Results view={view} send={send} names={names} />}
       </div>
       {g.detectiveLog?.length > 0 && !ended && (
-        <div className="text-xs text-white/50 text-center">Your checks: {g.detectiveLog.map((e) => `${names[e.target] || e.target}: ${e.isMafia ? 'Mafia' : 'not Mafia'}`).join(' · ')}</div>
+        <div className="text-xs text-white/50 text-center">Your checks: {g.detectiveLog.map((e) => names[e.target] || e.target).join(' · ')}</div>
       )}
     </div>
   );

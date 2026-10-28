@@ -186,13 +186,23 @@ describe('per-player views', () => {
     expect(nightSelect(room, doc, victim, now()).error.code).toBe('not_your_turn');
   });
 
-  it('the Detective answer is only in the Detective view', () => {
+  it('the Detective answer is in nobody\'s view, not even the Detective\'s (ADR 0013)', () => {
     let room = runUntil(inGame(5), (r) => r.game.phase === PHASES.DETECTIVE_TURN && r.flow.step === 'open');
     const det = seatsWith(room, 'detective')[0];
     const [mafia] = seatsWith(room, 'mafia');
     room = nightSelect(room, det, mafia, now()).room;
-    expect(viewFor(room, det).game.detectiveResult).toEqual({ target: mafia, isMafia: true });
-    room.game.players.filter((p) => p.name !== det).forEach((p) => expect(viewFor(room, p.name).game.detectiveResult).toBeNull());
+    expect(room.game.night.result).toBe(true); // recorded for the morning catch
+    const dv = viewFor(room, det).game;
+    expect(dv.mySelection).toBe(mafia); // the pick is confirmed
+    room.game.players.forEach((p) => {
+      const v = viewFor(room, p.name);
+      expect(v.game).not.toHaveProperty('detectiveResult');
+      expect(JSON.stringify(v)).not.toMatch(/isMafia|"result"/);
+    });
+    // by day the Detective's own list names the checked player only
+    room = runUntil(room, (r) => r.game.phase === PHASES.MORNING);
+    const log = viewFor(room, det).game.detectiveLog;
+    expect(log).toEqual([{ round: 1, target: mafia }]);
   });
 
   it('spectators and non-members get no roles', () => {

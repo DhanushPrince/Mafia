@@ -59,3 +59,22 @@ drives the same engine). Human GM mode is a manual reference screen, so only the
   and it would make the Doctor irrelevant on catch nights.
 - Mafia parity checked before the catch: rejected; catching the last Mafia must always win for the village.
 - Ending the game only on the last Mafia without removing others: rejected; one rule for every catch is simpler.
+
+## Amendment (2026-10-28): the Detective is not told the answer
+
+Players pointed out that a Detective who sees "MAFIA" at night already knows the morning's outcome. Now the
+Detective only names a suspect; the answer is never shown or said at night.
+
+- **App-GM narrator mode:** after the Detective's tap the screen shows "Choice locked in" (the pick is locked,
+  one per night). The "MAFIA / NOT MAFIA" screen and the `detective_result` clip ("Here is your answer") are
+  gone, and the Detective's taps no longer close early to leave reading time (`resultMs` removed): the turn is
+  the same fixed window as every other role, so nothing in sound, text or timing depends on the answer. A dead
+  Detective's dummy turn looks the same.
+- **Online rooms:** `viewFor` no longer sends `detectiveResult`, and `detectiveLog` carries only the checked
+  names (no `isMafia`); the Detective's phone shows "Choice locked in" and disables further taps.
+- **Human GM mode:** the Rules text tells the Game Master not to answer the Detective and to announce a
+  correct identification at morning.
+- **Morning:** unchanged from the voice-only rule above: on a correct check the narrator says "The Detective
+  found one of the Mafia last night. <name> has been eliminated."; on a wrong check nothing is said.
+- The engine still records `night.result` and the log's `detectiveCheck.isMafia` (they drive the catch);
+  they appear only on the game-over screen and log.
