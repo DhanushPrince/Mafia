@@ -5,6 +5,7 @@ import { routePartykitRequest } from 'partyserver';
 import { isRoomCode } from '../src/online/roomLogic.js';
 import { getAuth, googleEnabled } from './auth.js';
 import { originAllowed, corsHeaders } from './origins.js';
+import { handleAdmin } from './admin.js';
 
 /* global __BUILD_COMMIT__, __APP_VERSION__ */
 const COMMIT = typeof __BUILD_COMMIT__ !== 'undefined' ? __BUILD_COMMIT__ : 'dev';
@@ -46,6 +47,10 @@ export default {
         { ok: rooms.ok, version: VERSION, commit: COMMIT, time: new Date().toISOString(), rooms, google: googleEnabled(env), turn: Boolean(env.TURN_URLS) },
         { status: rooms.ok ? 200 : 503, headers: { ...cors, 'cache-control': 'no-store' } },
       );
+    }
+
+    if (url.pathname === '/admin' || url.pathname.startsWith('/admin/') || url.pathname.startsWith('/api/admin/')) {
+      return (await handleAdmin(request, env, url)) || new Response('Not found', { status: 404, headers: { 'x-robots-tag': 'noindex' } });
     }
 
     if (url.pathname.startsWith('/api/auth/')) {

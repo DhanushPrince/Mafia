@@ -24,6 +24,7 @@ vi.mock('better-auth/plugins', () => ({ anonymous: () => ({ id: 'anonymous' }) }
 const { default: worker } = await import('./index.js');
 const { seatFromGuestId } = await import('./room.js');
 const { googleEnabled } = await import('./auth.js');
+const { usageStats, safeEqual, lastDays } = await import('./admin.js');
 
 const BASE = 'https://mafia-dealer.acct.workers.dev';
 const req = (path, init = {}) => new Request(`${BASE}${path}`, init);
@@ -149,5 +150,99 @@ describe('worker static fallback', () => {
     const ASSETS = { fetch: vi.fn(async (r) => new Response(new URL(r.url).pathname)) };
     expect(await (await worker.fetch(req('/r/KQTZ'), { ASSETS })).text()).toBe('/r/KQTZ');
     expect((await worker.fetch(req('/r/KQTZ'), {})).status).toBe(404);
+  });
+});
+
+describe('worker /admin and /api/admin/stats (ADR 0014)', () => {
+  const ADMIN_TOKEN = 'correct-horse-battery-staple-42';
+  const NOW = Date.UTC(2026, 9, 28, 6); // 11:30 IST
+  const fakeAe = (rows) => vi.fn(async (_url, init) => {
+    const q = init.body;
+    const data = q.includes('GROUP BY day, event') ? rows.counts : q.includes('GROUP BY day') ? rows.guests : rows.total;
+    return new Response(JSON.stringify({ data }), { status: 200 });
+  });
+  const env = (over = {}) => ({ ADMIN_TOKEN, CF_ACCOUNT_ID: 'acct', CF_ANALYTICS_TOKEN: 'ae-token', ...over });
+  const stats = (headers = {}, e = env()) => worker.fetch(req('/api/admin/stats', { headers }), e);
+
+  it('401 without a key, with a wrong key, and when no ADMIN_TOKEN is configured; no data in the body', async () => {
+    for (const res of [
+      await stats(),
+      await stats({ authorization: 'Bearer wrong-key-wrong-key-wrong' }),
+      await stats({ authorization: ADMIN_TOKEN }), // not a Bearer header
+      await stats({ authorization: `Bearer ${ADMIN_TOKEN}` }, env({ ADMIN_TOKEN: undefined })),
+      await stats({ authorization: 'Bearer short' }, env({ ADMIN_TOKEN: 'short' })), // too-short secret stays locked
+    ]) {
+      expect(res.status).toBe(401);
+      expect(await res.json()).toEqual({ error: 'unauthorized' });
+      expect(res.headers.get('x-robots-tag')).toMatch(/noindex/);
+      expect(res.headers.get('cache-control')).toBe('no-store');
+    }
+  });
+
+  it('503 with the right key when the analytics read token is not set', async () => {
+    const res = await stats({ authorization: `Bearer ${ADMIN_TOKEN}` }, env({ CF_ANALYTICS_TOKEN: undefined }));
+    expect(res.status).toBe(503);
+  });
+
+  it('200 with the right key: per-day and total stats', async () => {
+    vi.stubGlobal('fetch', fakeAe({
+      counts: [
+        { day: '2026-10-28', event: 'join', n: '9', players: '20' },
+        { day: '2026-10-28', event: 'room_create', n: '2', players: '0' },
+        { day: '2026-10-28', event: 'game_start', n: '2', players: '11' },
+        { day: '2026-10-28', event: 'game_end', n: '1', players: '5' },
+        { day: '2026-10-20', event: 'game_start', n: '1', players: '6' },
+        { day: '2026-08-01', event: 'join', n: '99', players: '0' }, // outside the window: ignored
+      ],
+      guests: [{ day: '2026-10-28', guests: '7' }],
+      total: [{ guests: '8' }],
+    }));
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(NOW);
+    try {
+      const res = await stats({ authorization: `Bearer ${ADMIN_TOKEN}` });
+      expect(res.status).toBe(200);
+      expect(res.headers.get('x-robots-tag')).toMatch(/noindex/);
+      const body = await res.json();
+      expect(body.days).toHaveLength(30);
+      expect(body.to).toBe('2026-10-28');
+      expect(body.from).toBe('2026-09-29');
+      expect(body.days[0]).toEqual({ day: '2026-10-28', uniqueGuests: 7, joins: 9, roomsCreated: 2, gamesStarted: 2, gamesFinished: 1, avgPlayersPerGame: 5.5 });
+      expect(body.totals).toEqual({ uniqueGuests: 8, joins: 9, roomsCreated: 2, gamesStarted: 3, gamesFinished: 1, avgPlayersPerGame: 5.7 });
+      const [url, init] = fetch.mock.calls[0];
+      expect(url).toBe('https://api.cloudflare.com/client/v4/accounts/acct/analytics_engine/sql');
+      expect(init.headers.authorization).toBe('Bearer ae-token');
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('502 when the analytics query fails', async () => {
+    const fetchImpl = vi.fn(async () => new Response('no', { status: 403 }));
+    await expect(usageStats(env(), { now: NOW, fetchImpl })).rejects.toThrow(/403/);
+  });
+
+  it('serves the admin page with noindex, a strict CSP and no data', async () => {
+    const res = await worker.fetch(req('/admin'), {});
+    expect(res.status).toBe(200);
+    expect(res.headers.get('x-robots-tag')).toBe('noindex, nofollow');
+    expect(res.headers.get('content-security-policy')).toMatch(/frame-ancestors 'none'/);
+    const html = await res.text();
+    expect(html).toContain('<meta name="robots" content="noindex, nofollow">');
+    expect(html).toContain('/admin/app.js');
+    const js = await (await worker.fetch(req('/admin/app.js'), {})).text();
+    expect(js).toContain('sessionStorage');
+    expect(js).not.toContain('localStorage');
+    expect((await worker.fetch(req('/admin/other'), {})).status).toBe(404);
+  });
+
+  it('safeEqual / lastDays helpers', async () => {
+    expect(await safeEqual('abc', 'abc')).toBe(true);
+    expect(await safeEqual('abc', 'abd')).toBe(false);
+    expect(await safeEqual('abc', 'abcd')).toBe(false);
+    const days = lastDays(NOW);
+    expect(days).toHaveLength(30);
+    expect(days.at(-1)).toBe('2026-10-28');
   });
 });

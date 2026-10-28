@@ -30,8 +30,8 @@ function fakeStorage(initial = {}) {
 }
 
 /** A Room with fake sockets: `connect(gid, query)` mimics a WebSocket upgrade tagged with the seat. */
-async function makeRoom({ storage = fakeStorage(), code = 'KQTZ' } = {}) {
-  const room = new Room({ storage }, {});
+async function makeRoom({ storage = fakeStorage(), code = 'KQTZ', env = {} } = {}) {
+  const room = new Room({ storage }, env);
   room.name = code;
   const conns = [];
   room.getConnections = (tag) => (tag ? conns.filter((c) => c.tag === tag) : conns)[Symbol.iterator]();
@@ -449,5 +449,63 @@ describe('Room: close, storage and alarms', () => {
   it('send() swallows errors from a socket that already closed', () => {
     const r = new Room({ storage: fakeStorage() }, {});
     expect(() => r.send({ send() { throw new Error('closed'); } }, { t: 'x' })).not.toThrow();
+  });
+});
+
+describe('Room: usage events (ADR 0014)', () => {
+  const NAMES = ['Arjun', 'Priya', 'Karthik', 'Meena'];
+  const fakeUsage = () => ({ points: [], writeDataPoint(p) { this.points.push(structuredClone(p)); } });
+
+  it('writes create, one join per new guest, game start and game end, with no names, gids or seats', async () => {
+    const USAGE = fakeUsage();
+    const h = await makeRoom({ env: { USAGE } });
+    const conns = [];
+    for (const [i, name] of NAMES.entries()) conns.push(await h.connect(gid(i + 1), { name, ...(i === 0 ? { create: '1' } : {}) }));
+    // a reconnect of an existing guest is not a new join
+    await h.disconnect(conns[1]);
+    conns[1] = await h.connect(gid(2), { name: 'Priya' });
+    const [a, ...rest] = conns;
+    for (const p of rest) await h.msg(p, { t: 'ready', ready: true });
+    await h.msg(a, { t: 'start' });
+    for (const [i, p] of conns.entries()) await h.msg(p, { t: 'pick', index: i });
+    await h.msg(a, { t: 'forceNight' });
+    for (const p of rest) { if (lastView(a).game?.phase !== 'END') await h.msg(p, { t: 'leave' }); }
+    expect(lastView(a).game.phase).toBe('END');
+
+    const events = USAGE.points.map((p) => p.blobs[0]);
+    expect(events).toEqual(['room_create', 'join', 'join', 'join', 'join', 'game_start', 'game_end']);
+    for (const p of USAGE.points) {
+      expect(p.indexes).toEqual(['KQTZ']);
+      expect(p.blobs[1]).toBe('KQTZ');
+      expect(p.blobs[3]).toBe('2026-01-01'); // day in Asia/Kolkata (T0 = 17:30 IST)
+    }
+    expect(USAGE.points.find((p) => p.blobs[0] === 'game_start').doubles).toEqual([4]);
+    const guests = USAGE.points.filter((p) => p.blobs[0] === 'join').map((p) => p.blobs[2]);
+    expect(new Set(guests).size).toBe(4);
+    const seats = await Promise.all(NAMES.map((_, i) => seatFromGuestId(gid(i + 1))));
+    const dump = JSON.stringify(USAGE.points);
+    for (const [i, name] of NAMES.entries()) {
+      expect(dump).not.toContain(name);
+      expect(dump).not.toContain(gid(i + 1));
+      expect(dump).not.toContain(seats[i]);
+    }
+  });
+
+  it('does not count e2e rooms (fast=1) and adds no storage writes', async () => {
+    const USAGE = fakeUsage();
+    const counted = await makeRoom({ env: { USAGE: fakeUsage() } });
+    const plain = await makeRoom();
+    const fast = await makeRoom({ env: { USAGE } });
+    await fast.connect(gid(1), { name: 'Arjun', create: '1', fast: '1' });
+    expect(USAGE.points).toEqual([]);
+    await counted.connect(gid(1), { name: 'Arjun', create: '1' });
+    await plain.connect(gid(1), { name: 'Arjun', create: '1' });
+    expect(totalWrites(counted.storage)).toBe(totalWrites(plain.storage));
+  });
+
+  it('a failing analytics binding never breaks the room', async () => {
+    const h = await makeRoom({ env: { USAGE: { writeDataPoint() { throw new Error('down'); } } } });
+    const c = await h.connect(gid(1), { name: 'Arjun', create: '1' });
+    expect(lastView(c).members.map((m) => m.name)).toEqual(['Arjun']);
   });
 });

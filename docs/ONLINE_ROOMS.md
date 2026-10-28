@@ -131,6 +131,9 @@ D1 (Google sign-in only): better-auth tables in `migrations/0001_better_auth.sql
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Worker secret | Google sign-in (off when missing). |
 | `BETTER_AUTH_SECRET` | Worker secret | Session signing, 32+ random characters. |
 | `BETTER_AUTH_URL` | Worker var (optional) | Public base URL for auth callbacks. |
+| `ADMIN_TOKEN` | Worker secret | Key for `/admin` usage stats (32+ random characters). Unset: `/api/admin/stats` always 401. |
+| `CF_ACCOUNT_ID`, `CF_ANALYTICS_TOKEN` | Worker secret | Read side of usage stats: account id and an API token with **Account Analytics: Read** only. |
+| `USAGE` | Worker binding | Analytics Engine dataset `mafia_usage` (in `wrangler.jsonc`), written by the Room. |
 
 Local dev reads secrets from `.dev.vars` (git-ignored).
 
@@ -148,6 +151,27 @@ npm run deploy                # vite build && wrangler deploy -> https://mafia-d
   `npx wrangler d1 create mafia-auth`, uncomment `d1_databases` in `wrangler.jsonc` with the id,
   `npm run db:migrate`, then `wrangler secret put` the `GOOGLE_*` and `BETTER_AUTH_SECRET` values.
   Full steps: [../ONLINE_PROGRESS.md](../ONLINE_PROGRESS.md#enable-google-sign-in-later).
+
+## Usage stats (admin only)
+
+The Room writes one anonymous Analytics Engine data point per event: `room_create`, `join` (a guest new to
+that room, not a reconnect), `game_start` (deal -> game), `game_end` (reaching END). Each point holds the
+room code, the event, the day (Asia/Kolkata), the player count and, for joins, a salted hash of the seat id.
+No names, guest secrets or seat ids are written; e2e rooms (`fast=1`) are not counted. Writes go to
+Analytics Engine, not Durable Object storage, so they add no `rows_written`. Details: ADR 0014.
+
+`https://<worker-host>/admin` asks for the admin key, keeps it in `sessionStorage` only, and shows the last
+30 days per day (unique guests, joins, rooms created, games started/finished, avg players per game) plus
+totals. The page carries no data; `GET /api/admin/stats` needs `Authorization: Bearer <ADMIN_TOKEN>`
+(constant-time compare) and answers 401 otherwise. Both are `noindex` and `no-store`. Only the Worker host
+serves `/admin` (the Pages site does not).
+
+```bash
+openssl rand -base64 32 | npx wrangler secret put ADMIN_TOKEN
+echo <account id> | npx wrangler secret put CF_ACCOUNT_ID
+npx wrangler secret put CF_ANALYTICS_TOKEN      # token with Account > Account Analytics > Read
+curl -H "Authorization: Bearer <ADMIN_TOKEN>" https://<worker-host>/api/admin/stats
+```
 
 ## Health check
 

@@ -9,6 +9,7 @@
  */
 import { Server } from 'partyserver';
 import * as R from '../src/online/roomLogic.js';
+import { recordUsage } from './usage.js';
 
 const enc = new TextEncoder();
 export async function seatFromGuestId(gid) {
@@ -27,6 +28,7 @@ export class Room extends Server {
   async onStart() {
     this.room = (await this.ctx.storage.get('room')) || null;
     this.saved = this.room ? JSON.stringify(this.room) : null; // last persisted room, to skip no-op writes
+    this.usageBase = this.room; // room as of the last usage check (ADR 0014)
     this.alarmAt = (await this.ctx.storage.getAlarm()) ?? null; // currently scheduled alarm (a read, not a write)
   }
 
@@ -36,6 +38,9 @@ export class Room extends Server {
    */
   async save() {
     if (!this.room) return;
+    // anonymous usage events (Analytics Engine, not DO storage: no extra rows_written)
+    await recordUsage(this.env, this.name, this.usageBase, this.room);
+    this.usageBase = this.room;
     const json = JSON.stringify(this.room);
     if (json !== this.saved) {
       await this.ctx.storage.put('room', this.room);
@@ -179,12 +184,14 @@ export class Room extends Server {
     if (!this.room) {
       this.room = (await this.ctx.storage.get('room')) || null;
       this.saved = this.room ? JSON.stringify(this.room) : null;
+      this.usageBase = this.room;
     }
     if (!this.room) return;
     const now = Date.now();
     if (R.isExpired(this.room, now)) {
       this.room = null;
       this.saved = null;
+      this.usageBase = null;
       await this.ctx.storage.deleteAll();
       return;
     }
