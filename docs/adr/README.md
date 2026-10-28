@@ -18,5 +18,6 @@ Add a new file with the next number; to change a decision, add a new ADR that su
 | [0011](0011-google-meet-addon.md) | Google Meet add-on as the shared screen | Proposed |
 | [0012](0012-sonarqube-cloud-security-scan.md) | SonarQube Cloud and npm audit in CI for security scanning | Accepted |
 | [0013](0013-detective-catch.md) | Detective catch: a correct check eliminates that Mafia | Accepted |
+| [0014](0014-usage-stats-admin.md) | Anonymous usage stats in Analytics Engine, admin-only page | Accepted |
 
 Architecture overview: [../ONLINE_ROOMS.md](../ONLINE_ROOMS.md).

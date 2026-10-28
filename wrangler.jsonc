@@ -7,10 +7,13 @@
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/parties/*", "/health"]
+    "run_worker_first": ["/api/*", "/parties/*", "/health", "/admin", "/admin/*"]
   },
   "durable_objects": { "bindings": [{ "name": "Room", "class_name": "Room" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
+  // Anonymous usage events (ADR 0014). Admin page /admin needs secrets ADMIN_TOKEN, CF_ACCOUNT_ID and
+  // CF_ANALYTICS_TOKEN (an API token with "Account Analytics: Read"); without them /api/admin/stats stays closed.
+  "analytics_engine_datasets": [{ "binding": "USAGE", "dataset": "mafia_usage" }],
   // Google sign-in only: run `npx wrangler d1 create mafia-auth`, then uncomment with the real database_id.
   // "d1_databases": [{ "binding": "DB", "database_name": "mafia-auth", "database_id": "<id>", "migrations_dir": "migrations" }],
   "observability": { "enabled": true }
