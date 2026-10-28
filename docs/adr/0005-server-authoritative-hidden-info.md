@@ -14,7 +14,8 @@ with developer tools, so hiding it only in the UI is not enough.
   `viewFor(room, seat)`:
   - your own role only; other roles are hidden until the game ends;
   - Mafia teammates and their picks only to alive Mafia during the Mafia turn;
-  - the Detective's result only to the Detective;
+  - the Detective's result to nobody before the game ends (amended by ADR 0013: a correct check is announced
+    at morning; a wrong one never);
   - dead players and spectators get the public view plus their own role.
 - Card pick: the shuffled deck stays on the server. Clients see which cards are taken and by whom, never
   what is under them; the server checks that a card is free and assigns it.

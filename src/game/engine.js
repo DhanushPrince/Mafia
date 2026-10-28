@@ -73,7 +73,7 @@ export function createInitialState(rules = {}, timers = undefined, lang = undefi
     players: [], // [{ name, role, alive }]
     nightOrder: [], // role ids with a night turn this game
     round: 0, // night/day counter, 1-based once the first night starts
-    night: emptyNight(), // selections: { [roleId]: name }, result: detective answer
+    night: emptyNight(), // selections: { [roleId]: name }, result: detective answer (never shown at night; drives the morning catch)
     lastSave: null, // who the Doctor saved last night (repeat-save rule)
     morning: null, // { victim, attacked, saved, detectiveFoundMafia, caught }
     vote: null, // { out, tie } once the village has voted this day
@@ -179,8 +179,6 @@ export function selectTargets(state) {
 /** What the current night turn has selected (for highlighting). */
 export const selectCurrentSelection = (state) => state.night.selections[currentTurnRole(state)] ?? null;
 export const selectSelection = (state, roleId) => state.night.selections[roleId] ?? null;
-/** Detective's answer this night: true (Mafia) / false (not Mafia) / null. */
-export const selectDetectiveResult = (state) => state.night.result;
 
 /**
  * Narration items are clip ids (strings) or { name } for a synthesised player name.
@@ -244,7 +242,7 @@ export const voteClip = (state) => (state.vote ? (state.vote.tie ? 'tie' : 'vote
 /** Every clip id the game can use (for preloading). */
 export function allClipIds() {
   const ids = new Set(['pass_hint', 'night_start', 'morning', 'killed', 'saved', 'discuss', 'vote', 'voted_out', 'tie', 'villagers_win', 'mafia_win', 'detective_found', 'killed_pre', 'killed_post', 'voted_out_pre', 'voted_out_post']);
-  Object.values(ROLE_DEFS).forEach((d) => [d.wakeClip, d.sleepClip, d.resultClip].forEach((c) => c && ids.add(c)));
+  Object.values(ROLE_DEFS).forEach((d) => [d.wakeClip, d.sleepClip].forEach((c) => c && ids.add(c)));
   return [...ids];
 }
 

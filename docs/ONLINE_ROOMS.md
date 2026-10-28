@@ -41,9 +41,11 @@ flowchart LR
 5. Morning, discussion, open vote on phones, win check; results; rematch or back to lobby.
 
 Detective catch (ADR 0013): a correct Detective check eliminates that Mafia at morning, after the night kill
-(the Doctor's save does not protect them), and the morning names them. Then the win check: catching the last
-Mafia ends the game at once (village wins, no discussion or vote); otherwise the game goes on. A wrong guess
-is not announced.
+(the Doctor's save does not protect them), and the narrator names them at morning (voice only, no morning
+text). The Detective is never told the answer at night: their phone only shows "Choice locked in", and the
+server never sends the result (their "Your checks" list has names only). Then the win check: catching the
+last Mafia ends the game at once (village wins, no discussion or vote); otherwise the game goes on. A wrong
+guess is not announced.
 
 ## Protocol
 

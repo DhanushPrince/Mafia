@@ -83,7 +83,7 @@ function gameView(game, flow, extra = {}) {
       phase: 'DAY', round: 1, winner: null, night: false, turnRole: null,
       players: MEMBERS.map((m) => ({ seat: m.seat, alive: true, role: null })),
       me: { seat: 's1', role: 'villager', alive: true },
-      awake: false, myTurn: false, targets: [], mySelection: null, mafiaPicks: null, detectiveResult: null,
+      awake: false, myTurn: false, targets: [], mySelection: null, mafiaPicks: null,
       detectiveLog: null, morning: null, votes: null, vote: null, log: null, ...game,
     },
     ...extra,
@@ -470,14 +470,20 @@ describe('game', () => {
     expect(sent()).toContainEqual({ t: 'select', target: 's2' });
   });
 
-  it('detective sees the answer at night and the log by day', async () => {
-    await renderAt('/r/KQTZ', gameView({
+  it('detective gets only "Choice locked in" at night, never the answer; the day log lists names only', async () => {
+    const night = (mySelection) => gameView({
       phase: 'DETECTIVE_TURN', night: true, turnRole: 'detective', awake: true, myTurn: true, me: { seat: 's1', role: 'detective', alive: true },
-      targets: [{ seat: 's2', disabled: false }], detectiveResult: { target: 's2', isMafia: true },
-    }, { step: 'open', deadline: Date.now() + 15_000 }));
-    expect(screen.getByTestId('detective-result').textContent).toBe('Priya IS Mafia');
-    act(() => room.set({ view: gameView({ me: { seat: 's1', role: 'detective', alive: true }, detectiveLog: [{ round: 1, target: 's2', isMafia: true }] }, { step: 'discuss', deadline: Date.now() + 60_000 }) }));
-    expect(screen.getByText('Your checks: Priya: Mafia')).toBeTruthy();
+      targets: [{ seat: 's2', disabled: false }, { seat: 's3', disabled: false }], mySelection,
+    }, { step: 'open', deadline: Date.now() + 15_000 });
+    await renderAt('/r/KQTZ', night(null));
+    expect(screen.queryByTestId('detective-locked')).toBeNull();
+    act(() => room.set({ view: night('s2') }));
+    expect(screen.getByTestId('detective-locked').textContent).toBe('Choice locked in');
+    expect(screen.queryByTestId('detective-result')).toBeNull();
+    expect(screen.getByTestId('night-action').textContent).not.toMatch(/IS Mafia|not Mafia/);
+    expect(screen.getAllByTestId('target').every((b) => b.disabled)).toBe(true);
+    act(() => room.set({ view: gameView({ me: { seat: 's1', role: 'detective', alive: true }, detectiveLog: [{ round: 1, target: 's2' }] }, { step: 'discuss', deadline: Date.now() + 60_000 }) }));
+    expect(screen.getByText('Your checks: Priya')).toBeTruthy();
   });
 
   it('morning news and discussion; host can skip to the vote', async () => {

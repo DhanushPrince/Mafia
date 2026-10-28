@@ -522,7 +522,8 @@ function leaveGame(room, seat, now) {
  *  - roles: your own; fellow Mafia if you are Mafia; everyone's only at END
  *  - targets / current selection: only to the role that is awake, only while its window is open
  *  - Mafia picks: only to alive Mafia during the Mafia turn
- *  - Detective answers: only to the Detective
+ *  - Detective answers: never, to anyone, before END (a correct check is announced at morning, ADR 0013);
+ *    the Detective sees only which players they checked
  *  - votes are open (everyone sees who voted whom) - a room default, see ONLINE_PROGRESS.md
  *  - dead players and spectators get the public view plus their own role
  */
@@ -585,11 +586,8 @@ export function viewFor(room, seat, now = Date.now()) {
       targets: awake ? selectTargets(g).map((t) => ({ seat: t.name, disabled: t.disabled, reason: t.reason })) : [],
       mySelection: awake ? g.night.selections[turn] ?? null : null,
       mafiaPicks: awake && turn === 'mafia' ? room.mafiaPicks : null,
-      detectiveResult: awake && turn === 'detective' && g.night.selections.detective
-        ? { target: g.night.selections.detective, isMafia: g.night.result }
-        : null,
       detectiveLog: myRole === 'detective'
-        ? g.log.filter((e) => e.detectiveCheck && (e.round < g.round || !night)).map((e) => ({ round: e.round, ...e.detectiveCheck }))
+        ? g.log.filter((e) => e.detectiveCheck && (e.round < g.round || !night)).map((e) => ({ round: e.round, target: e.detectiveCheck.target }))
         : null,
       morning: !night ? g.morning : null,
       votes: g.phase === PHASES.VOTE ? room.votes : null,

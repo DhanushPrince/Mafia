@@ -314,14 +314,9 @@ async function narratorRun(n) {
       const check = plan === 'villagers' && round % 2 ? mafiaAlive()[0] : othersAlive().find((x) => x !== detective);
       if (check) {
         await tap(page.getByRole('button', { name: check, exact: true }));
-        if (detAlive) {
-          await page.getByTestId('detective-result').waitFor({ timeout: 4000 });
-          const r = await page.getByTestId('detective-result').getAttribute('data-mafia');
-          if (r !== String(isM(check))) ok(false, `R${round} detective result for ${check}: ${r}`);
-        } else {
-          await page.waitForTimeout(400);
-          if (await page.getByTestId('detective-result').count()) ok(false, `R${round} dead detective got a result`);
-        }
+        // ADR 0013: alive or dead, the Detective only sees "Choice locked in", never a verdict
+        await page.getByTestId('detective-locked').waitFor({ timeout: 4000 }).catch(() => ok(false, `R${round} detective pick not locked in`));
+        if (await page.getByTestId('detective-result').count()) ok(false, `R${round} detective saw a result`);
       }
       // ---- MORNING ----
       await page.getByTestId('morning-result').waitFor({ timeout: 30000 });

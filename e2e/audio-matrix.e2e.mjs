@@ -1,7 +1,7 @@
 // Audio matrix e2e: full narrator games at many player counts, for both narrator voices, with every audio
 // request instrumented (see lib/harness.mjs audioInitScript). For each game it checks that:
 //  - every expected narration line plays, in order (night intro, each role's wake/sleep incl. the dummy turn
-//    of a dead role, detective result, morning, kill/saved summary, detective_found only when a living
+//    of a dead role (no detective result clip, ADR 0013), morning, kill/saved summary, detective_found only when a living
 //    Detective checked a real Mafia, discuss, vote, vote outcome, winner) and nothing unexpected plays
 //  - every clip actually started and finished (no rejected play(), no media error, no 4xx on /audio/)
 //  - clips come from the selected voice's folder (george/heart = English, ta_rasa/ta_jaya = Tamil)
@@ -189,11 +189,8 @@ async function game(browser, ctxOpts, n, voice) {
       // a correct check catches that Mafia (house rule), so only the villagers plan checks the Mafia
       const check = plan === 'villagers' && round % 2 ? mafiaAlive()[0] : othersAlive().find((x) => x !== detective);
       if (check) await tapName(check);
-      if (detAlive && check) {
-        const shown = await page.getByTestId('detective-result').waitFor({ timeout: 4000 }).then(() => true, () => false);
-        if (!shown) issues.push(`R${round} detective result not shown`);
-      }
-      expected.push('detective_wake', ...(detAlive && check ? ['detective_result'] : []), 'detective_sleep');
+      if (check && (await page.getByTestId('detective-result').count())) issues.push(`R${round} detective result shown (ADR 0013: never at night)`);
+      expected.push('detective_wake', 'detective_sleep'); // no "here is your answer" clip, alive or dead
       // ---- MORNING ----
       await page.getByTestId('morning-result').waitFor({ timeout: 60000 });
       const victim = target !== effSave ? target : null;
