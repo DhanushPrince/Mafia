@@ -29,7 +29,10 @@ by device, and the game must never stall waiting for audio.
 - Consistent, good-sounding narration with no server cost; works offline after first load (except the
   first Tamil name model download).
 - Licences:
-  - Piper Tamil Rasa voices are CC-BY-4.0: the app must credit AI4Bharat Rasa and tinisoft.
+  - Piper Tamil Rasa voices are CC-BY-4.0: the app must credit AI4Bharat Rasa and tinisoft. Done: since
+    2026-10-30 the home screen has a *Credits & licences* panel (`src/components/Credits.jsx`, data in
+    `src/credits.js`) crediting the Rasa voices, Indic Parler-TTS, Kokoro-82M, piper-phonemize / espeak-ng
+    and the Rajdhani font with their licences; the same list is in `THIRD_PARTY_NOTICES.md`.
   - The vendored phonemizer bundles espeak-ng, which is GPL-3.0. This only matters if the app is ever
     distributed in a store or as closed source (then replace it, or comply with GPL-3.0); the app is a
     prototype today.

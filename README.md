@@ -4,6 +4,8 @@ A pass-the-phone Mafia role dealer with a **Game Master view**, built with React
 
 **Live:** https://mafia-dealer.pages.dev (Cloudflare Pages, auto-deployed from `main`)
 
+**Licence:** MIT, see [LICENSE](LICENSE). Voices, models and other third-party parts are credited in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and in the app (home screen > *Credits & licences*).
+
 ## Features
 
 - 🎭 Smart role assignment based on player count (4-20 players)
