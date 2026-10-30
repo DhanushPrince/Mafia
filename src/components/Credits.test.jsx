@@ -54,7 +54,7 @@ describe('Credits', () => {
     const d = open();
     fireEvent.click(d); // clicks inside the panel keep it open
     expect(screen.getByRole('dialog')).toBeTruthy();
-    fireEvent.click(d.parentElement);
+    fireEvent.click(screen.getByTestId('credits-backdrop'));
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 

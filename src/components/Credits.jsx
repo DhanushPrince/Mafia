@@ -16,13 +16,20 @@ export function CreditsPanel({ onClose }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <button
+        type="button"
+        aria-label="Dismiss credits"
+        data-testid="credits-backdrop"
+        tabIndex={-1}
+        onClick={onClose}
+        className="absolute inset-0 w-full h-full cursor-default bg-black/70 backdrop-blur-sm"
+      />
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="credits-title"
         className="relative w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl border border-white/10 bg-black/80 p-6 shadow-2xl text-left"
-        onClick={(e) => e.stopPropagation()}
       >
         <button type="button" onClick={onClose} aria-label="Close credits" className="absolute top-4 right-4 p-1 text-white/60 hover:text-white">
           <X size={20} />
