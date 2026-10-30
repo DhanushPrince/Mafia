@@ -179,7 +179,7 @@ function DealingScreen({ deck, names, assignments, onAssign, onOpenGameMaster, o
                 <button
                   type="button"
                   onClick={closePicker}
-                  className="p-1 rounded-full text-white/50 hover:text-white hover:bg-white/10"
+                  className="p-2.5 -m-1.5 rounded-full text-white/50 hover:text-white hover:bg-white/10"
                   aria-label="Cancel"
                 >
                   <X size={22} />

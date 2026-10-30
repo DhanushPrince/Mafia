@@ -63,3 +63,24 @@ describe('Credits', () => {
     expect(open().textContent).toContain('Piper Tamil Rasa');
   });
 });
+
+describe('home screen entry points', () => {
+  it('the Rules button calls onRules and sits above the title layer', () => {
+    const onRules = vi.fn();
+    render(<PlayerCountScreen onStart={() => {}} onRules={onRules} />);
+    const btn = screen.getByTestId('rules-button');
+    fireEvent.click(btn);
+    expect(onRules).toHaveBeenCalledTimes(1);
+    // the title's motion wrapper is a later stacking context; without its own z-index the button is covered on narrow phones
+    expect(btn.className).toMatch(/\bz-20\b/);
+  });
+
+  it('keeps the credits close button outside the scrolling body so it stays reachable after scrolling', () => {
+    render(<Credits />);
+    const d = open();
+    const body = screen.getByTestId('credits-scroll');
+    expect(d.contains(body)).toBe(true);
+    expect(body.contains(screen.getByTestId('credits-close'))).toBe(false);
+    expect(within(body).getByTestId('credit-piper-rasa')).toBeTruthy();
+  });
+});

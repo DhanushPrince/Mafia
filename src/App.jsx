@@ -51,6 +51,8 @@ function App() {
   const [showVolumeHint, setShowVolumeHint] = useState(() => !volumeHintSeen());
   const [boundaryKey, setBoundaryKey] = useState(0);
   const [online, setOnline] = useState(() => isOnlinePath());
+  // rules open over the home screen (not instead of it) so the player count / settings picked there survive
+  const [rulesOpen, setRulesOpen] = useState(false);
   useEffect(() => {
     const onPop = () => setOnline(isOnlinePath());
     window.addEventListener('popstate', onPop);
@@ -203,12 +205,12 @@ function App() {
     <div className="app relative min-h-screen text-white overflow-hidden">
       <Background />
       <div className="relative z-10">
-        {screen === 'rules' && <RulesScreen onClose={() => setScreen('playerCount')} />}
+        {rulesOpen && <RulesScreen onClose={() => setRulesOpen(false)} />}
         {screen === 'playerCount' && (
           <PlayerCountScreen
             initialCount={playerCount}
             onStart={goToNames}
-            onRules={() => setScreen('rules')}
+            onRules={() => setRulesOpen(true)}
             settings={settings}
             onSettings={updateSettings}
             resume={describeSaved(savedGame)}
