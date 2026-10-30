@@ -5,6 +5,7 @@ import { narrator, LANGS, normalizeLang, narratorVoice, voicesFor } from '../aud
 
 import { MIN_PLAYERS, MAX_PLAYERS } from '../game/roles';
 import { TURN_OPTIONS_SEC, DISCUSS_OPTIONS_MIN, normalizeTimers, formatTurn, formatDiscuss } from '../game/timing';
+import Credits from './Credits';
 
 // One shared AudioContext for every tick (browsers cap the number of live contexts).
 let sharedAudioCtx = null;
@@ -377,6 +378,9 @@ function PlayerCountScreen({ initialCount = 6, onStart, onRules, settings, onSet
               </button>
             )}
           </div>
+        </div>
+        <div className="mt-6 text-center">
+          <Credits />
         </div>
       </motion.div>
 
