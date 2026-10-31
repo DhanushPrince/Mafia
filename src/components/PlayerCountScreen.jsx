@@ -139,7 +139,7 @@ const PlayerCounter = ({ count, onChange }) => {
             whileTap={{ scale: 0.9 }}
             aria-label="Increase player count"
             onClick={(e) => { e.preventDefault(); updateCount(count + 1); }}
-            className="p-2 rounded-lg bg-white/5 border border-white/10 text-violet-200 hover:text-white transition-colors"
+            className="p-2.5 rounded-lg bg-white/5 border border-white/10 text-violet-200 hover:text-white transition-colors"
           >
             <ChevronUp size={20} />
           </motion.button>
@@ -148,7 +148,7 @@ const PlayerCounter = ({ count, onChange }) => {
             whileTap={{ scale: 0.9 }}
             aria-label="Decrease player count"
             onClick={(e) => { e.preventDefault(); updateCount(count - 1); }}
-            className="p-2 rounded-lg bg-white/5 border border-white/10 text-violet-200 hover:text-white transition-colors"
+            className="p-2.5 rounded-lg bg-white/5 border border-white/10 text-violet-200 hover:text-white transition-colors"
           >
             <ChevronDown size={20} />
           </motion.button>
@@ -181,7 +181,7 @@ const PresetRow = ({ label, icon: Icon, options, value, format, onChange, testId
           role="radio"
           aria-checked={value === o}
           onClick={() => onChange(o)}
-          className={`rounded-lg border py-2 text-xs font-bold font-mono tabular-nums transition-colors ${
+          className={`min-h-10 rounded-lg border py-2 text-xs font-bold font-mono tabular-nums transition-colors ${
             value === o ? 'bg-violet-600/40 border-violet-400/60 text-white' : 'bg-black/20 border-white/10 text-violet-200/70'
           }`}
         >
@@ -289,7 +289,7 @@ function ModeSettings({ settings, onSettings }) {
                 >
                   <span className="block font-bold">{v.label}</span> <span className="block whitespace-nowrap text-white/50 text-xs">{v.description}</span>
                 </button>
-                <button type="button" aria-label={`Preview ${v.label} voice`} onClick={() => preview(v.gender)} className="p-2 text-violet-200/70 hover:text-white">
+                <button type="button" aria-label={`Preview ${v.label} voice`} onClick={() => preview(v.gender)} className="flex items-center justify-center min-w-10 min-h-10 text-violet-200/70 hover:text-white">
                   <Play size={14} />
                 </button>
               </div>
@@ -313,9 +313,10 @@ function PlayerCountScreen({ initialCount = 6, onStart, onRules, settings, onSet
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 relative z-10">
+    <div className="min-h-screen flex flex-col items-center justify-center px-4 pb-4 pt-20 sm:pt-24 relative z-10">
       <motion.button
-        className="absolute top-4 right-4 sm:top-8 sm:right-8 flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-md hover:bg-white/10 transition-colors text-violet-200"
+        data-testid="rules-button"
+        className="absolute z-20 top-4 right-4 sm:top-8 sm:right-8 flex items-center gap-2 min-h-11 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-md hover:bg-white/10 transition-colors text-violet-200"
         onClick={onRules}
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}

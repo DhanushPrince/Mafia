@@ -95,7 +95,7 @@ function Rules({ onClose }) {
       >
         {/* Top Stepper */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-white/10 bg-gray-900/80 backdrop-blur-xl">
-          <div className="flex items-center gap-2 lg:gap-4 flex-1 justify-center">
+          <div className="flex min-w-0 items-center gap-2 lg:gap-4 flex-1 justify-center">
             {STEPPER.map((step, i) => (
               <div key={step.label} className="flex items-center gap-2 lg:gap-4">
                 <div className="flex items-center gap-2">
@@ -107,11 +107,11 @@ function Rules({ onClose }) {
                     <div className="text-[10px] lg:text-xs text-gray-400">{step.desc}</div>
                   </div>
                 </div>
-                {i < STEPPER.length - 1 && <ChevronRight size={16} className="text-gray-500" />}
+                {i < STEPPER.length - 1 && <ChevronRight size={16} className="hidden sm:block text-gray-500" />}
               </div>
             ))}
           </div>
-          <button onClick={onClose} aria-label="Close rules" className="p-2 rounded-full hover:bg-white/10 text-white/70 hover:text-white transition-colors ml-4">
+          <button onClick={onClose} aria-label="Close rules" className="shrink-0 p-2 rounded-full hover:bg-white/10 text-white/70 hover:text-white transition-colors ml-2 sm:ml-4">
             <X size={24} />
           </button>
         </div>
@@ -167,7 +167,7 @@ function Rules({ onClose }) {
                 <button
                   key={item.id}
                   onClick={() => setActiveSection(item.id)}
-                  className={`flex-shrink-0 px-3 py-2 rounded-lg text-xs font-bold transition-all ${
+                  className={`flex-shrink-0 min-h-10 px-3 py-2 rounded-lg text-xs font-bold transition-all ${
                     activeSection === item.id ? 'bg-purple-600 text-white' : 'bg-white/10 text-gray-300'
                   }`}
                 >
